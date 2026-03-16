@@ -4,9 +4,11 @@
   "description": "Scan dependencies for open source license risks across npm, cargo, pip, gems, go, and swift",
   "type": "module",
   "bin": {
-    "lguard": "./src/cli.js"
+    "lguard": "src/cli.js"
   },
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "scripts": {
     "start": "node src/cli.js"
   },
