@@ -1,0 +1,35 @@
+{
+  "name": "lguard",
+  "version": "0.1.0",
+  "description": "Scan dependencies for open source license risks across npm, cargo, pip, gems, go, and swift",
+  "type": "module",
+  "bin": {
+    "lguard": "./src/cli.js"
+  },
+  "files": ["src"],
+  "scripts": {
+    "start": "node src/cli.js"
+  },
+  "keywords": [
+    "license",
+    "audit",
+    "compliance",
+    "dependencies",
+    "security",
+    "copyleft",
+    "agpl",
+    "gpl",
+    "open-source"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/automata-hq/lguard.git"
+  },
+  "homepage": "https://github.com/automata-hq/lguard",
+  "bugs": "https://github.com/automata-hq/lguard/issues",
+  "author": "automata-hq",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
