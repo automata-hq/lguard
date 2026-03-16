@@ -3,7 +3,6 @@ import { join } from 'path';
 
 const FETCH_TIMEOUT = 10_000;
 
-// PEP 503: normalize name by lowercasing and replacing [-_.] with -
 function normalizeName(name) {
   return name.toLowerCase().replace(/[-_.]+/g, '-');
 }
@@ -30,17 +29,18 @@ export const python = {
 
     if (packages.size === 0) throw new Error('No Python dependencies found');
 
-    // Try local venv metadata first
     const resolved = await resolveLocal(dir, packages);
 
-    // Fetch remaining from PyPI
     const unresolved = [...packages.keys()].filter(name => !resolved.has(name));
     if (unresolved.length > 0) {
       const fetched = await fetchFromPyPI(unresolved);
       for (const dep of fetched) resolved.set(normalizeName(dep.name), dep);
     }
 
-    return [...resolved.values()];
+    const deps = [...resolved.values()];
+    // Python: all declared packages are considered direct, no graph available
+    const directDeps = new Set(packages.keys());
+    return { deps, graph: {}, directDeps };
   },
 };
 
@@ -135,7 +135,6 @@ async function fetchFromPyPI(names) {
         if (!res.ok) return { name, version: 'unknown', license: null };
         const data = await res.json();
         let license = data.info?.license || null;
-        // PyPI sometimes has very long license text instead of SPDX ID — skip those
         if (license && license.length > 100) license = null;
         return { name: data.info?.name || name, version: data.info?.version || 'unknown', license };
       } catch {

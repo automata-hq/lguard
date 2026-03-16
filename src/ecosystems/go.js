@@ -37,6 +37,9 @@ export const go = {
       modCache = modCache.trim();
     } catch {}
 
+    // Build graph from go mod graph
+    const { graph, directDeps } = await buildGraph(dir, modules);
+
     const deps = [];
     for (const mod of modules) {
       if (mod.Main) continue;
@@ -44,9 +47,45 @@ export const go = {
       deps.push({ name: mod.Path, version: mod.Version || 'unknown', license });
     }
 
-    return deps;
+    return { deps, graph, directDeps };
   },
 };
+
+async function buildGraph(dir, modules) {
+  const graph = {};
+  const directDeps = new Set();
+
+  try {
+    const { stdout } = await exec('go', ['mod', 'graph'], {
+      cwd: dir,
+      maxBuffer: 50 * 1024 * 1024,
+    });
+
+    let mainModule = null;
+    for (const line of stdout.split('\n')) {
+      if (!line.trim()) continue;
+      const [from, to] = line.split(' ');
+      const fromName = from.split('@')[0];
+      const toName = to.split('@')[0];
+
+      if (!mainModule && !from.includes('@')) mainModule = fromName;
+
+      if (!graph[fromName]) graph[fromName] = [];
+      graph[fromName].push(toName);
+    }
+
+    if (mainModule && graph[mainModule]) {
+      for (const dep of graph[mainModule]) directDeps.add(dep);
+    }
+  } catch {
+    // go mod graph might fail — fall back to marking all as direct
+    for (const mod of modules) {
+      if (!mod.Main) directDeps.add(mod.Path);
+    }
+  }
+
+  return { graph, directDeps };
+}
 
 function parseGoListOutput(stdout) {
   const modules = [];
@@ -59,9 +98,7 @@ function parseGoListOutput(stdout) {
     if (char === '}') {
       depth--;
       if (depth === 0) {
-        try {
-          modules.push(JSON.parse(current));
-        } catch {}
+        try { modules.push(JSON.parse(current)); } catch {}
         current = '';
       }
     }
@@ -87,18 +124,12 @@ async function findLicense(modCache, modPath, version) {
 
 function identifyLicense(content) {
   const t = content.toLowerCase();
-
-  // Check specific licenses before general ones to avoid false matches
-  // AGPL before GPL (AGPL files contain "gnu general public license" text)
   if (t.includes('gnu affero general public license')) return 'AGPL-3.0';
-  // LGPL before GPL (LGPL files reference GPL)
   if (t.includes('gnu lesser general public license') && t.includes('version 3')) return 'LGPL-3.0';
   if (t.includes('gnu lesser general public license') && t.includes('version 2')) return 'LGPL-2.1';
   if (t.includes('gnu lesser general public license')) return 'LGPL-2.1';
-  // Now GPL is safe to check
   if (t.includes('gnu general public license') && t.includes('version 3')) return 'GPL-3.0';
   if (t.includes('gnu general public license') && t.includes('version 2')) return 'GPL-2.0';
-
   if (t.includes('mozilla public license') && t.includes('2.0')) return 'MPL-2.0';
   if (t.includes('eclipse public license') && t.includes('2.0')) return 'EPL-2.0';
   if (t.includes('eclipse public license') && t.includes('1.0')) return 'EPL-1.0';

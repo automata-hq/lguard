@@ -39,28 +39,112 @@ lguard --ecosystem=cargo
 
 # Ignore specific packages
 lguard --ignore=some-pkg,another-pkg
+
+# Generate a .lguardrc config file
+lguard --init
 ```
 
 ## Example output
 
 ```
-lguard v0.1.1
+lguard v0.3.0
 
   Path:        /home/user/my-app
   Ecosystems:  npm
   Total deps:  142
+  Config:      .lguardrc
+
+  POLICY VIOLATIONS — 1 package(s)
+    evil-lib@2.0.0                                AGPL-3.0             [npm] (transitive) VIOLATION
+      └─ express > middleware-x > evil-lib
+      denied by policy
 
   HIGH RISK (copyleft) — 1 package(s)
-    evil-lib@2.0.0                                AGPL-3.0             [npm]
+    evil-lib@2.0.0                                AGPL-3.0             [npm] (transitive) VIOLATION
+      └─ express > middleware-x > evil-lib
 
-  MEDIUM RISK (weak copyleft) — 2 package(s)
-    image-lib@1.4.0                               LGPL-3.0-or-later    [npm]
-    xml-parser@3.1.0                               MPL-2.0              [npm]
+  MEDIUM RISK (weak copyleft) — 1 package(s)
+    @img/sharp-libvips-darwin-arm64@1.0.4         LGPL-3.0-or-later    [npm] (transitive) overridden
+      └─ sharp > @img/sharp-libvips-darwin-arm64
+      "Dynamically linked — LGPL allows this use"
 
   LOW RISK (permissive) — 139 package(s) (use --all to show)
 
-  Summary: 1 high, 2 medium, 139 permissive
+  Summary: 1 high, 1 medium, 139 permissive | 1 policy violation(s) | 1 overridden
 ```
+
+## Config file
+
+Run `lguard --init` to generate a `.lguardrc` in your project root.
+
+```json
+{
+  "deny": ["AGPL-3.0", "GPL-3.0", "SSPL-1.0"],
+  "ignore": [],
+  "failOn": "high",
+  "overrides": {}
+}
+```
+
+### Options
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `deny` | `string[]` | Block these licenses. Any dep using a denied license is a policy violation. |
+| `allow` | `string[]` | Only allow these licenses. Everything else is a violation. Mutually exclusive with `deny`. |
+| `ignore` | `string[]` | Skip these packages entirely. |
+| `failOn` | `string` | Exit with code 1 if risk level met. One of: `high`, `medium`, `unknown`. |
+| `overrides` | `object` | Package-level exceptions. Key is package name, value is a reason string. Overridden packages are never policy violations. |
+
+### Allow vs deny
+
+**`deny`** is a blocklist. Use it when you want to block specific problematic licenses but allow everything else:
+
+```json
+{ "deny": ["AGPL-3.0", "GPL-3.0", "SSPL-1.0"] }
+```
+
+**`allow`** is a whitelist. Use it when you want strict control over exactly which licenses are permitted:
+
+```json
+{ "allow": ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "0BSD"] }
+```
+
+### Overrides
+
+When you've reviewed a dependency and accepted its license despite the policy, add an override:
+
+```json
+{
+  "deny": ["LGPL-3.0-or-later"],
+  "overrides": {
+    "@img/sharp-libvips-darwin-arm64": "Dynamically linked — LGPL allows this use"
+  }
+}
+```
+
+Overridden packages are still shown in the output with their risk level, but they don't trigger policy violations or exit code 1.
+
+## Dependency chains
+
+lguard traces how transitive dependencies end up in your project. When a risky dep is found, the chain shows which direct dependency pulled it in:
+
+```
+  MEDIUM RISK (weak copyleft) — 1 package(s)
+    @img/sharp-libvips-darwin-arm64@1.0.4         LGPL-3.0-or-later    [npm] (transitive)
+      └─ sharp > @img/sharp-libvips-darwin-arm64
+```
+
+Dependency graph support by ecosystem:
+
+| Ecosystem | Graph support |
+|-----------|--------------|
+| npm / bun / pnpm | Full chain |
+| Cargo | Full chain |
+| Go | Full chain |
+| RubyGems | Full chain |
+| Python | Direct deps only |
+| Swift | Direct deps only |
 
 ## Supported ecosystems
 
@@ -87,6 +171,11 @@ Multiple ecosystems in the same project are detected and scanned automatically.
 SPDX expressions are handled correctly:
 - `(MIT OR GPL-3.0)` — OR means you can choose, so the least risky option is used
 - `(MIT AND GPL-3.0)` — AND means you must comply with both, so the most risky option is used
+- `GPL-2.0-only WITH Classpath-exception-2.0` — WITH exceptions are parsed correctly
+
+Policy evaluation also respects SPDX semantics:
+- `deny: ["GPL-3.0"]` won't block `(MIT OR GPL-3.0)` because the consumer can choose MIT
+- `deny: ["GPL-3.0"]` will block `(MIT AND GPL-3.0)` because GPL-3.0 compliance is required
 
 ## CI integration
 
@@ -95,6 +184,8 @@ SPDX expressions are handled correctly:
 - name: License check
   run: npx lguard --fail-on=high
 ```
+
+With a `.lguardrc` in your repo, lguard automatically picks it up. Policy violations always exit with code 1.
 
 `--fail-on` accepts `high`, `medium`, or `unknown` and exits with code 1 if any dependency matches that risk level or above.
 

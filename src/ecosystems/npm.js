@@ -14,8 +14,17 @@ export const npm = {
   },
 
   async scan(dir) {
+    const rootPkg = JSON.parse(await readFile(join(dir, 'package.json'), 'utf-8'));
+    const directDeps = new Set([
+      ...Object.keys(rootPkg.dependencies || {}),
+      ...Object.keys(rootPkg.devDependencies || {}),
+      ...Object.keys(rootPkg.optionalDependencies || {}),
+      ...Object.keys(rootPkg.peerDependencies || {}),
+    ]);
+
     const nodeModules = join(dir, 'node_modules');
     const deps = [];
+    const graph = {};
 
     let entries;
     try {
@@ -32,15 +41,21 @@ export const npm = {
         const scopedEntries = await readdir(join(nodeModules, entry)).catch(() => []);
         for (const scopedEntry of scopedEntries) {
           const pkg = await readPkg(join(nodeModules, entry, scopedEntry, 'package.json'));
-          if (pkg) deps.push(pkg);
+          if (pkg) {
+            deps.push({ name: pkg.name, version: pkg.version, license: pkg.license });
+            graph[pkg.name] = pkg.deps;
+          }
         }
       } else {
         const pkg = await readPkg(join(nodeModules, entry, 'package.json'));
-        if (pkg) deps.push(pkg);
+        if (pkg) {
+          deps.push({ name: pkg.name, version: pkg.version, license: pkg.license });
+          graph[pkg.name] = pkg.deps;
+        }
       }
     }
 
-    return deps;
+    return { deps, graph, directDeps };
   },
 };
 
@@ -50,16 +65,20 @@ async function readPkg(path) {
     const pkg = JSON.parse(raw);
 
     let license = pkg.license;
-
-    // Handle { type: "MIT", url: "..." } format
     if (license && typeof license === 'object') license = license.type;
-
-    // Handle legacy "licenses" array
     if (!license && Array.isArray(pkg.licenses)) {
       license = pkg.licenses.map(l => (typeof l === 'object' ? l.type : l)).join(' OR ');
     }
 
-    return { name: pkg.name, version: pkg.version || 'unknown', license: license || null };
+    return {
+      name: pkg.name,
+      version: pkg.version || 'unknown',
+      license: license || null,
+      deps: [
+        ...Object.keys(pkg.dependencies || {}),
+        ...Object.keys(pkg.optionalDependencies || {}),
+      ],
+    };
   } catch {
     return null;
   }

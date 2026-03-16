@@ -56,35 +56,8 @@ const LICENSE_MAP = {
   'W3C': RISK.LOW,
 };
 
-function classifyLicense(license) {
-  if (!license) return { risk: RISK.UNKNOWN, normalized: null };
+// --- Tokenizer ---
 
-  const normalized = license.trim();
-  if (LICENSE_MAP[normalized]) return { risk: LICENSE_MAP[normalized], normalized };
-
-  // Case-insensitive match
-  const upper = normalized.toUpperCase();
-  for (const [key, risk] of Object.entries(LICENSE_MAP)) {
-    if (key.toUpperCase() === upper) return { risk, normalized: key };
-  }
-
-  // Pattern matching for common variations
-  if (/\bAGPL\b/i.test(normalized)) return { risk: RISK.HIGH, normalized };
-  if (/\bGPL\b/i.test(normalized) && !/\bLGPL\b/i.test(normalized)) return { risk: RISK.HIGH, normalized };
-  if (/\bSSPL\b/i.test(normalized)) return { risk: RISK.HIGH, normalized };
-  if (/\bLGPL\b/i.test(normalized)) return { risk: RISK.MEDIUM, normalized };
-  if (/\bMPL\b/i.test(normalized)) return { risk: RISK.MEDIUM, normalized };
-  if (/\bEPL\b/i.test(normalized)) return { risk: RISK.MEDIUM, normalized };
-  if (/\bCDDL\b/i.test(normalized)) return { risk: RISK.MEDIUM, normalized };
-  if (/\bMIT\b/i.test(normalized)) return { risk: RISK.LOW, normalized };
-  if (/\bApache\b/i.test(normalized)) return { risk: RISK.LOW, normalized };
-  if (/\bBSD\b/i.test(normalized)) return { risk: RISK.LOW, normalized };
-  if (/\bISC\b/i.test(normalized)) return { risk: RISK.LOW, normalized };
-
-  return { risk: RISK.UNKNOWN, normalized };
-}
-
-// Tokenize SPDX expression into atoms, operators, and parens
 function tokenize(expr) {
   const tokens = [];
   let i = 0;
@@ -105,70 +78,205 @@ function tokenize(expr) {
   return tokens;
 }
 
-// Recursive descent parser for SPDX expressions
-// Handles: license WITH exception, AND, OR, parentheses
-function parseExpression(tokens, pos) {
-  let { result, pos: newPos } = parseAnd(tokens, pos);
-  while (newPos < tokens.length && tokens[newPos].type === 'OR') {
-    newPos++;
-    const right = parseAnd(tokens, newPos);
-    // OR = you can choose, pick least risky
-    const order = [RISK.LOW, RISK.MEDIUM, RISK.HIGH, RISK.UNKNOWN];
-    result = order.indexOf(result.risk) <= order.indexOf(right.result.risk) ? result : right.result;
-    newPos = right.pos;
-  }
-  return { result, pos: newPos };
+function isCompound(expression) {
+  return / OR /i.test(expression) || / AND /i.test(expression) || / WITH /i.test(expression) || /[()]/.test(expression);
 }
 
-function parseAnd(tokens, pos) {
-  let { result, pos: newPos } = parseAtom(tokens, pos);
-  while (newPos < tokens.length && tokens[newPos].type === 'AND') {
-    newPos++;
-    const right = parseAtom(tokens, newPos);
-    // AND = must comply with all, pick most risky
-    const order = [RISK.LOW, RISK.MEDIUM, RISK.HIGH, RISK.UNKNOWN];
-    result = order.indexOf(result.risk) >= order.indexOf(right.result.risk) ? result : right.result;
-    newPos = right.pos;
+// --- Single license classification ---
+
+function classifyLicense(license) {
+  if (!license) return { risk: RISK.UNKNOWN, normalized: null };
+
+  const normalized = license.trim();
+  if (LICENSE_MAP[normalized]) return { risk: LICENSE_MAP[normalized], normalized };
+
+  const upper = normalized.toUpperCase();
+  for (const [key, risk] of Object.entries(LICENSE_MAP)) {
+    if (key.toUpperCase() === upper) return { risk, normalized: key };
   }
-  return { result, pos: newPos };
+
+  if (/\bAGPL\b/i.test(normalized)) return { risk: RISK.HIGH, normalized };
+  if (/\bGPL\b/i.test(normalized) && !/\bLGPL\b/i.test(normalized)) return { risk: RISK.HIGH, normalized };
+  if (/\bSSPL\b/i.test(normalized)) return { risk: RISK.HIGH, normalized };
+  if (/\bLGPL\b/i.test(normalized)) return { risk: RISK.MEDIUM, normalized };
+  if (/\bMPL\b/i.test(normalized)) return { risk: RISK.MEDIUM, normalized };
+  if (/\bEPL\b/i.test(normalized)) return { risk: RISK.MEDIUM, normalized };
+  if (/\bCDDL\b/i.test(normalized)) return { risk: RISK.MEDIUM, normalized };
+  if (/\bMIT\b/i.test(normalized)) return { risk: RISK.LOW, normalized };
+  if (/\bApache\b/i.test(normalized)) return { risk: RISK.LOW, normalized };
+  if (/\bBSD\b/i.test(normalized)) return { risk: RISK.LOW, normalized };
+  if (/\bISC\b/i.test(normalized)) return { risk: RISK.LOW, normalized };
+
+  return { risk: RISK.UNKNOWN, normalized };
 }
 
-function parseAtom(tokens, pos) {
+// --- Risk classification (recursive descent) ---
+
+const RISK_ORDER = [RISK.LOW, RISK.MEDIUM, RISK.HIGH, RISK.UNKNOWN];
+
+function parseRiskExpr(tokens, pos) {
+  let { result, pos: p } = parseRiskAnd(tokens, pos);
+  while (p < tokens.length && tokens[p].type === 'OR') {
+    p++;
+    const right = parseRiskAnd(tokens, p);
+    result = RISK_ORDER.indexOf(result.risk) <= RISK_ORDER.indexOf(right.result.risk) ? result : right.result;
+    p = right.pos;
+  }
+  return { result, pos: p };
+}
+
+function parseRiskAnd(tokens, pos) {
+  let { result, pos: p } = parseRiskAtom(tokens, pos);
+  while (p < tokens.length && tokens[p].type === 'AND') {
+    p++;
+    const right = parseRiskAtom(tokens, p);
+    result = RISK_ORDER.indexOf(result.risk) >= RISK_ORDER.indexOf(right.result.risk) ? result : right.result;
+    p = right.pos;
+  }
+  return { result, pos: p };
+}
+
+function parseRiskAtom(tokens, pos) {
   if (pos >= tokens.length) return { result: { risk: RISK.UNKNOWN, normalized: null }, pos };
-
   if (tokens[pos].type === 'LPAREN') {
-    const inner = parseExpression(tokens, pos + 1);
-    // consume RPAREN if present
-    const newPos = inner.pos < tokens.length && tokens[inner.pos].type === 'RPAREN' ? inner.pos + 1 : inner.pos;
-    return { result: inner.result, pos: newPos };
+    const inner = parseRiskExpr(tokens, pos + 1);
+    const p = inner.pos < tokens.length && tokens[inner.pos].type === 'RPAREN' ? inner.pos + 1 : inner.pos;
+    return { result: inner.result, pos: p };
   }
-
   if (tokens[pos].type === 'LICENSE') {
-    let licenseId = tokens[pos].value;
-    let newPos = pos + 1;
-    // Handle WITH exception (e.g., GPL-2.0-only WITH Classpath-exception-2.0)
-    if (newPos < tokens.length && tokens[newPos].type === 'WITH') {
-      newPos++; // skip WITH
-      if (newPos < tokens.length && tokens[newPos].type === 'LICENSE') newPos++; // skip exception
+    let p = pos + 1;
+    if (p < tokens.length && tokens[p].type === 'WITH') {
+      p++;
+      if (p < tokens.length && tokens[p].type === 'LICENSE') p++;
     }
-    return { result: classifyLicense(licenseId), pos: newPos };
+    return { result: classifyLicense(tokens[pos].value), pos: p };
   }
-
   return { result: { risk: RISK.UNKNOWN, normalized: null }, pos: pos + 1 };
 }
 
 export function classifyExpression(expression) {
   if (!expression) return { risk: RISK.UNKNOWN, normalized: null };
-
   const trimmed = expression.trim();
-  // Fast path for simple license IDs (no operators or parens)
-  if (!/[\s()]/.test(trimmed) || (!/ OR /i.test(trimmed) && !/ AND /i.test(trimmed) && !/ WITH /i.test(trimmed))) {
-    return classifyLicense(trimmed);
-  }
-
+  if (!isCompound(trimmed)) return classifyLicense(trimmed);
   const tokens = tokenize(trimmed);
   if (tokens.length === 0) return { risk: RISK.UNKNOWN, normalized: null };
-  return parseExpression(tokens, 0).result;
+  return parseRiskExpr(tokens, 0).result;
+}
+
+// --- Policy evaluation (allow/deny against SPDX expressions) ---
+
+function licenseMatchesSet(license, set) {
+  if (!license) return false;
+  const lower = license.trim().toLowerCase();
+  for (const entry of set) {
+    if (entry.toLowerCase() === lower) return true;
+  }
+  return false;
+}
+
+// Deny: OR = violation only if ALL branches denied, AND = violation if ANY branch denied
+function parseDenyExpr(tokens, pos, denySet) {
+  let { result, pos: p } = parseDenyAnd(tokens, pos, denySet);
+  while (p < tokens.length && tokens[p].type === 'OR') {
+    p++;
+    const right = parseDenyAnd(tokens, p, denySet);
+    // OR: denied only if both sides denied (can choose the non-denied one)
+    result = result && right.result;
+    p = right.pos;
+  }
+  return { result, pos: p };
+}
+
+function parseDenyAnd(tokens, pos, denySet) {
+  let { result, pos: p } = parseDenyAtom(tokens, pos, denySet);
+  while (p < tokens.length && tokens[p].type === 'AND') {
+    p++;
+    const right = parseDenyAtom(tokens, p, denySet);
+    // AND: denied if either side denied
+    result = result || right.result;
+    p = right.pos;
+  }
+  return { result, pos: p };
+}
+
+function parseDenyAtom(tokens, pos, denySet) {
+  if (pos >= tokens.length) return { result: false, pos };
+  if (tokens[pos].type === 'LPAREN') {
+    const inner = parseDenyExpr(tokens, pos + 1, denySet);
+    const p = inner.pos < tokens.length && tokens[inner.pos].type === 'RPAREN' ? inner.pos + 1 : inner.pos;
+    return { result: inner.result, pos: p };
+  }
+  if (tokens[pos].type === 'LICENSE') {
+    let p = pos + 1;
+    if (p < tokens.length && tokens[p].type === 'WITH') {
+      p++;
+      if (p < tokens.length && tokens[p].type === 'LICENSE') p++;
+    }
+    return { result: licenseMatchesSet(tokens[pos].value, denySet), pos: p };
+  }
+  return { result: false, pos: pos + 1 };
+}
+
+// Allow: OR = allowed if ANY branch allowed, AND = allowed only if ALL branches allowed
+function parseAllowExpr(tokens, pos, allowSet) {
+  let { result, pos: p } = parseAllowAnd(tokens, pos, allowSet);
+  while (p < tokens.length && tokens[p].type === 'OR') {
+    p++;
+    const right = parseAllowAnd(tokens, p, allowSet);
+    // OR: allowed if either side allowed
+    result = result || right.result;
+    p = right.pos;
+  }
+  return { result, pos: p };
+}
+
+function parseAllowAnd(tokens, pos, allowSet) {
+  let { result, pos: p } = parseAllowAtom(tokens, pos, allowSet);
+  while (p < tokens.length && tokens[p].type === 'AND') {
+    p++;
+    const right = parseAllowAtom(tokens, p, allowSet);
+    // AND: allowed only if both sides allowed
+    result = result && right.result;
+    p = right.pos;
+  }
+  return { result, pos: p };
+}
+
+function parseAllowAtom(tokens, pos, allowSet) {
+  if (pos >= tokens.length) return { result: false, pos };
+  if (tokens[pos].type === 'LPAREN') {
+    const inner = parseAllowExpr(tokens, pos + 1, allowSet);
+    const p = inner.pos < tokens.length && tokens[inner.pos].type === 'RPAREN' ? inner.pos + 1 : inner.pos;
+    return { result: inner.result, pos: p };
+  }
+  if (tokens[pos].type === 'LICENSE') {
+    let p = pos + 1;
+    if (p < tokens.length && tokens[p].type === 'WITH') {
+      p++;
+      if (p < tokens.length && tokens[p].type === 'LICENSE') p++;
+    }
+    return { result: licenseMatchesSet(tokens[pos].value, allowSet), pos: p };
+  }
+  return { result: false, pos: pos + 1 };
+}
+
+export function isExpressionDenied(expression, denyList) {
+  if (!expression || !denyList || denyList.length === 0) return false;
+  const trimmed = expression.trim();
+  if (!isCompound(trimmed)) return licenseMatchesSet(trimmed, denyList);
+  const tokens = tokenize(trimmed);
+  if (tokens.length === 0) return false;
+  return parseDenyExpr(tokens, 0, denyList).result;
+}
+
+export function isExpressionAllowed(expression, allowList) {
+  if (!expression) return false;
+  if (!allowList || allowList.length === 0) return true;
+  const trimmed = expression.trim();
+  if (!isCompound(trimmed)) return licenseMatchesSet(trimmed, allowList);
+  const tokens = tokenize(trimmed);
+  if (tokens.length === 0) return false;
+  return parseAllowExpr(tokens, 0, allowList).result;
 }
 
 export { RISK };

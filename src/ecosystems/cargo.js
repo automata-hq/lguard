@@ -32,8 +32,29 @@ export const cargo = {
     const metadata = JSON.parse(stdout);
     const rootPkgs = new Set((metadata.workspace_members || []).map(m => m.split(' ')[0]));
 
-    return metadata.packages
+    // Build id-to-name map
+    const idToName = {};
+    for (const pkg of metadata.packages) idToName[pkg.id] = pkg.name;
+
+    // Build graph and find direct deps from resolve
+    const graph = {};
+    const directDeps = new Set();
+
+    if (metadata.resolve?.nodes) {
+      for (const node of metadata.resolve.nodes) {
+        const name = idToName[node.id];
+        const nodeDeps = (node.deps || []).map(d => d.name || idToName[d.pkg]).filter(Boolean);
+        graph[name] = nodeDeps;
+        if (rootPkgs.has(name)) {
+          for (const dep of nodeDeps) directDeps.add(dep);
+        }
+      }
+    }
+
+    const deps = metadata.packages
       .filter(pkg => !rootPkgs.has(pkg.name))
       .map(pkg => ({ name: pkg.name, version: pkg.version, license: pkg.license || null }));
+
+    return { deps, graph, directDeps };
   },
 };

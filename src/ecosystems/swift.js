@@ -27,6 +27,9 @@ export const swift = {
     const pins = resolved.pins || resolved.object?.pins || [];
     const deps = [];
 
+    // All SwiftPM resolved deps are considered direct (flat resolution)
+    const directDeps = new Set();
+
     for (const pin of pins) {
       const name = pin.identity || pin.package || extractName(pin.location || pin.repositoryURL || '');
       const version = pin.state?.version || pin.state?.revision?.slice(0, 8) || 'unknown';
@@ -39,9 +42,10 @@ export const swift = {
       }
 
       deps.push({ name, version, license });
+      directDeps.add(name);
     }
 
-    return deps;
+    return { deps, graph: {}, directDeps };
   },
 };
 
@@ -55,7 +59,8 @@ async function fetchGitHubLicense(repo) {
     const headers = { Accept: 'application/vnd.github.v3+json' };
     if (process.env.GITHUB_TOKEN) headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
 
-    const res = await fetch(`https://api.github.com/repos/${encodeURIComponent(repo.split('/')[0])}/${encodeURIComponent(repo.split('/')[1])}/license`, {
+    const [owner, name] = repo.split('/');
+    const res = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/license`, {
       headers,
       signal: AbortSignal.timeout(FETCH_TIMEOUT),
     });

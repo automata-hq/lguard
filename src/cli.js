@@ -4,8 +4,9 @@ import { resolve } from 'path';
 import { stat } from 'fs/promises';
 import { scanProject } from './scan.js';
 import { formatResults } from './output.js';
+import { loadConfig, initConfig } from './config.js';
 
-const VALID_FLAGS = new Set(['all', 'json', 'fail-on', 'ecosystem', 'ignore', 'help']);
+const VALID_FLAGS = new Set(['all', 'json', 'fail-on', 'ecosystem', 'ignore', 'help', 'init']);
 const VALID_FAIL_LEVELS = new Set(['high', 'medium', 'unknown']);
 
 const args = process.argv.slice(2);
@@ -39,7 +40,19 @@ Options:
   --fail-on=LEVEL    Exit 1 if risk level found (high, medium, unknown)
   --ecosystem=NAME   Force specific ecosystem (npm, cargo, python, ruby, go, swift)
   --ignore=PKG,...   Ignore specific packages (comma-separated)
+  --init             Generate a default .lguardrc config file
   -h, --help         Show this help
+
+Config (.lguardrc):
+  {
+    "deny": ["AGPL-3.0", "GPL-3.0", ...],   // block these licenses
+    "allow": ["MIT", "Apache-2.0", ...],     // only allow these (mutually exclusive with deny)
+    "ignore": ["pkg-name"],                  // skip these packages
+    "failOn": "high",                        // exit 1 threshold
+    "overrides": {                           // reviewed exceptions
+      "pkg-name": "reason for override"
+    }
+  }
 
 Risk levels:
   HIGH     Strong copyleft (AGPL, GPL, SSPL) — viral, must open-source your code
@@ -50,13 +63,23 @@ Risk levels:
   process.exit(0);
 }
 
+const targetPath = resolve(positional[0] || '.');
+
+if (flags.init) {
+  try {
+    const path = await initConfig(targetPath);
+    console.log(`Created ${path}`);
+    process.exit(0);
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  }
+}
+
 if (flags['fail-on'] && !VALID_FAIL_LEVELS.has(flags['fail-on'])) {
   console.error(`Invalid --fail-on level: ${flags['fail-on']}. Must be one of: ${[...VALID_FAIL_LEVELS].join(', ')}`);
   process.exit(1);
 }
-
-const targetPath = resolve(positional[0] || '.');
-const ignore = flags.ignore ? flags.ignore.split(',') : [];
 
 try {
   const st = await stat(targetPath);
@@ -70,9 +93,13 @@ try {
 }
 
 try {
+  const config = await loadConfig(targetPath);
+  const ignore = flags.ignore ? flags.ignore.split(',') : [];
+
   const results = await scanProject(targetPath, {
     ecosystem: flags.ecosystem,
     ignore,
+    config,
   });
 
   if (flags.json) {
@@ -81,16 +108,26 @@ try {
     formatResults(results, { showAll: flags.all });
   }
 
-  if (flags['fail-on']) {
-    const level = flags['fail-on'];
+  // Determine exit code
+  const failOn = flags['fail-on'] || config?.failOn;
+  let shouldFail = false;
+
+  // Policy violations always cause failure when config is active
+  if (results.summary.violations > 0) shouldFail = true;
+
+  // Risk level threshold
+  if (failOn) {
     const hasRisk = results.dependencies.some(d => {
-      if (level === 'high') return d.risk === 'high';
-      if (level === 'medium') return d.risk === 'high' || d.risk === 'medium';
-      if (level === 'unknown') return d.risk !== 'low';
+      if (d.overrideReason) return false; // overridden deps don't cause failure
+      if (failOn === 'high') return d.risk === 'high';
+      if (failOn === 'medium') return d.risk === 'high' || d.risk === 'medium';
+      if (failOn === 'unknown') return d.risk !== 'low';
       return false;
     });
-    if (hasRisk) process.exit(1);
+    if (hasRisk) shouldFail = true;
   }
+
+  if (shouldFail) process.exit(1);
 } catch (err) {
   console.error(`Error: ${err.message}`);
   process.exit(1);
