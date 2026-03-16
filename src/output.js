@@ -6,8 +6,11 @@ const BOLD = '\x1b[1m';
 const RESET = '\x1b[0m';
 const DIM = '\x1b[2m';
 
-function padEnd(str, len) {
-  return str.length >= len ? str : str + ' '.repeat(len - str.length);
+// Strip ANSI/control characters from untrusted package metadata
+function sanitize(str) {
+  if (!str) return str;
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/[\x00-\x1f\x7f-\x9f]/g, '');
 }
 
 export function formatResults(results, options = {}) {
@@ -24,8 +27,8 @@ export function formatResults(results, options = {}) {
   if (high.length > 0) {
     console.log(`${RED}${BOLD}  HIGH RISK (copyleft)${RESET} ${RED}— ${high.length} package(s)${RESET}`);
     for (const d of high) {
-      const nameVer = `${d.name}@${d.version}`;
-      console.log(`    ${padEnd(nameVer, 45)} ${RED}${padEnd(d.license || 'UNKNOWN', 20)}${RESET} ${DIM}[${d.ecosystem}]${RESET}`);
+      const nameVer = sanitize(`${d.name}@${d.version}`);
+      console.log(`    ${nameVer.padEnd(45)} ${RED}${sanitize(d.license || 'UNKNOWN').padEnd(20)}${RESET} ${DIM}[${d.ecosystem}]${RESET}`);
     }
     console.log();
   }
@@ -33,8 +36,8 @@ export function formatResults(results, options = {}) {
   if (medium.length > 0) {
     console.log(`${YELLOW}${BOLD}  MEDIUM RISK (weak copyleft)${RESET} ${YELLOW}— ${medium.length} package(s)${RESET}`);
     for (const d of medium) {
-      const nameVer = `${d.name}@${d.version}`;
-      console.log(`    ${padEnd(nameVer, 45)} ${YELLOW}${padEnd(d.license || 'UNKNOWN', 20)}${RESET} ${DIM}[${d.ecosystem}]${RESET}`);
+      const nameVer = sanitize(`${d.name}@${d.version}`);
+      console.log(`    ${nameVer.padEnd(45)} ${YELLOW}${sanitize(d.license || 'UNKNOWN').padEnd(20)}${RESET} ${DIM}[${d.ecosystem}]${RESET}`);
     }
     console.log();
   }
@@ -42,8 +45,8 @@ export function formatResults(results, options = {}) {
   if (unknown.length > 0) {
     console.log(`${GRAY}${BOLD}  UNKNOWN LICENSE${RESET} ${GRAY}— ${unknown.length} package(s)${RESET}`);
     for (const d of unknown) {
-      const nameVer = `${d.name}@${d.version}`;
-      console.log(`    ${padEnd(nameVer, 45)} ${GRAY}${padEnd(d.license || 'NONE', 20)}${RESET} ${DIM}[${d.ecosystem}]${RESET}`);
+      const nameVer = sanitize(`${d.name}@${d.version}`);
+      console.log(`    ${nameVer.padEnd(45)} ${GRAY}${sanitize(d.license || 'NONE').padEnd(20)}${RESET} ${DIM}[${d.ecosystem}]${RESET}`);
     }
     console.log();
   }
@@ -51,8 +54,8 @@ export function formatResults(results, options = {}) {
   if (options.showAll && low.length > 0) {
     console.log(`${GREEN}${BOLD}  LOW RISK (permissive)${RESET} ${GREEN}— ${low.length} package(s)${RESET}`);
     for (const d of low) {
-      const nameVer = `${d.name}@${d.version}`;
-      console.log(`    ${padEnd(nameVer, 45)} ${GREEN}${padEnd(d.license || 'UNKNOWN', 20)}${RESET} ${DIM}[${d.ecosystem}]${RESET}`);
+      const nameVer = sanitize(`${d.name}@${d.version}`);
+      console.log(`    ${nameVer.padEnd(45)} ${GREEN}${sanitize(d.license || 'UNKNOWN').padEnd(20)}${RESET} ${DIM}[${d.ecosystem}]${RESET}`);
     }
     console.log();
   } else if (low.length > 0) {

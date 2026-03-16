@@ -1,6 +1,6 @@
 {
   "name": "lguard",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Scan dependencies for open source license risks across npm, cargo, pip, gems, go, and swift",
   "type": "module",
   "bin": {

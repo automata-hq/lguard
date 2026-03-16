@@ -1,6 +1,9 @@
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
+const FETCH_TIMEOUT = 10_000;
+const GH_REPO_RE = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+
 export const swift = {
   name: 'swift',
 
@@ -31,7 +34,9 @@ export const swift = {
 
       let license = null;
       const ghMatch = url.match(/github\.com\/([^/]+\/[^/.]+)/);
-      if (ghMatch) license = await fetchGitHubLicense(ghMatch[1]);
+      if (ghMatch && GH_REPO_RE.test(ghMatch[1])) {
+        license = await fetchGitHubLicense(ghMatch[1]);
+      }
 
       deps.push({ name, version, license });
     }
@@ -50,7 +55,10 @@ async function fetchGitHubLicense(repo) {
     const headers = { Accept: 'application/vnd.github.v3+json' };
     if (process.env.GITHUB_TOKEN) headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
 
-    const res = await fetch(`https://api.github.com/repos/${repo}/license`, { headers });
+    const res = await fetch(`https://api.github.com/repos/${encodeURIComponent(repo.split('/')[0])}/${encodeURIComponent(repo.split('/')[1])}/license`, {
+      headers,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+    });
     if (!res.ok) return null;
     const data = await res.json();
     return data.license?.spdx_id || null;

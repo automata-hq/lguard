@@ -1,6 +1,8 @@
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
+const FETCH_TIMEOUT = 10_000;
+
 export const ruby = {
   name: 'ruby',
 
@@ -26,11 +28,16 @@ export const ruby = {
       const batch = gems.slice(i, i + BATCH);
       const promises = batch.map(async ({ name, version }) => {
         try {
-          const res = await fetch(`https://rubygems.org/api/v1/gems/${name}.json`);
+          const encodedName = encodeURIComponent(name);
+          const encodedVersion = encodeURIComponent(version);
+          const res = await fetch(
+            `https://rubygems.org/api/v2/rubygems/${encodedName}/versions/${encodedVersion}.json`,
+            { signal: AbortSignal.timeout(FETCH_TIMEOUT) },
+          );
           if (!res.ok) return { name, version, license: null };
           const data = await res.json();
           const licenses = data.licenses || [];
-          return { name, version: data.version || version, license: licenses.length > 0 ? licenses.join(' OR ') : null };
+          return { name, version, license: licenses.length > 0 ? licenses.join(' OR ') : null };
         } catch {
           return { name, version, license: null };
         }

@@ -87,11 +87,18 @@ async function findLicense(modCache, modPath, version) {
 
 function identifyLicense(content) {
   const t = content.toLowerCase();
+
+  // Check specific licenses before general ones to avoid false matches
+  // AGPL before GPL (AGPL files contain "gnu general public license" text)
   if (t.includes('gnu affero general public license')) return 'AGPL-3.0';
-  if (t.includes('gnu general public license') && t.includes('version 3')) return 'GPL-3.0';
-  if (t.includes('gnu general public license') && t.includes('version 2')) return 'GPL-2.0';
+  // LGPL before GPL (LGPL files reference GPL)
   if (t.includes('gnu lesser general public license') && t.includes('version 3')) return 'LGPL-3.0';
   if (t.includes('gnu lesser general public license') && t.includes('version 2')) return 'LGPL-2.1';
+  if (t.includes('gnu lesser general public license')) return 'LGPL-2.1';
+  // Now GPL is safe to check
+  if (t.includes('gnu general public license') && t.includes('version 3')) return 'GPL-3.0';
+  if (t.includes('gnu general public license') && t.includes('version 2')) return 'GPL-2.0';
+
   if (t.includes('mozilla public license') && t.includes('2.0')) return 'MPL-2.0';
   if (t.includes('eclipse public license') && t.includes('2.0')) return 'EPL-2.0';
   if (t.includes('eclipse public license') && t.includes('1.0')) return 'EPL-1.0';

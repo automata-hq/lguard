@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 
 import { resolve } from 'path';
+import { stat } from 'fs/promises';
 import { scanProject } from './scan.js';
 import { formatResults } from './output.js';
 
+const VALID_FLAGS = new Set(['all', 'json', 'fail-on', 'ecosystem', 'ignore', 'help']);
+const VALID_FAIL_LEVELS = new Set(['high', 'medium', 'unknown']);
+
 const args = process.argv.slice(2);
-const flags = {};
+const flags = Object.create(null);
 const positional = [];
 
 for (const arg of args) {
@@ -13,6 +17,10 @@ for (const arg of args) {
     flags.help = true;
   } else if (arg.startsWith('--')) {
     const [key, ...rest] = arg.slice(2).split('=');
+    if (!VALID_FLAGS.has(key)) {
+      console.error(`Unknown flag: --${key}`);
+      process.exit(1);
+    }
     flags[key] = rest.length ? rest.join('=') : true;
   } else {
     positional.push(arg);
@@ -42,8 +50,24 @@ Risk levels:
   process.exit(0);
 }
 
+if (flags['fail-on'] && !VALID_FAIL_LEVELS.has(flags['fail-on'])) {
+  console.error(`Invalid --fail-on level: ${flags['fail-on']}. Must be one of: ${[...VALID_FAIL_LEVELS].join(', ')}`);
+  process.exit(1);
+}
+
 const targetPath = resolve(positional[0] || '.');
 const ignore = flags.ignore ? flags.ignore.split(',') : [];
+
+try {
+  const st = await stat(targetPath);
+  if (!st.isDirectory()) {
+    console.error(`Error: Not a directory: ${targetPath}`);
+    process.exit(1);
+  }
+} catch {
+  console.error(`Error: Path does not exist: ${targetPath}`);
+  process.exit(1);
+}
 
 try {
   const results = await scanProject(targetPath, {

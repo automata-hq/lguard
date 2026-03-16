@@ -10,7 +10,6 @@ const LICENSE_MAP = {
   'EUPL-1.1': RISK.HIGH, 'EUPL-1.2': RISK.HIGH,
   'OSL-3.0': RISK.HIGH,
   'RPL-1.1': RISK.HIGH, 'RPL-1.5': RISK.HIGH,
-  'AGPL-3.0-only WITH': RISK.HIGH,
 
   // Medium risk — weak copyleft
   'LGPL-2.0': RISK.MEDIUM, 'LGPL-2.0-only': RISK.MEDIUM, 'LGPL-2.0-or-later': RISK.MEDIUM,
@@ -85,28 +84,91 @@ function classifyLicense(license) {
   return { risk: RISK.UNKNOWN, normalized };
 }
 
+// Tokenize SPDX expression into atoms, operators, and parens
+function tokenize(expr) {
+  const tokens = [];
+  let i = 0;
+  while (i < expr.length) {
+    if (expr[i] === '(') { tokens.push({ type: 'LPAREN' }); i++; continue; }
+    if (expr[i] === ')') { tokens.push({ type: 'RPAREN' }); i++; continue; }
+    if (/\s/.test(expr[i])) { i++; continue; }
+
+    let word = '';
+    while (i < expr.length && !/[\s()]/.test(expr[i])) word += expr[i++];
+
+    const upper = word.toUpperCase();
+    if (upper === 'OR') tokens.push({ type: 'OR' });
+    else if (upper === 'AND') tokens.push({ type: 'AND' });
+    else if (upper === 'WITH') tokens.push({ type: 'WITH' });
+    else tokens.push({ type: 'LICENSE', value: word });
+  }
+  return tokens;
+}
+
+// Recursive descent parser for SPDX expressions
+// Handles: license WITH exception, AND, OR, parentheses
+function parseExpression(tokens, pos) {
+  let { result, pos: newPos } = parseAnd(tokens, pos);
+  while (newPos < tokens.length && tokens[newPos].type === 'OR') {
+    newPos++;
+    const right = parseAnd(tokens, newPos);
+    // OR = you can choose, pick least risky
+    const order = [RISK.LOW, RISK.MEDIUM, RISK.HIGH, RISK.UNKNOWN];
+    result = order.indexOf(result.risk) <= order.indexOf(right.result.risk) ? result : right.result;
+    newPos = right.pos;
+  }
+  return { result, pos: newPos };
+}
+
+function parseAnd(tokens, pos) {
+  let { result, pos: newPos } = parseAtom(tokens, pos);
+  while (newPos < tokens.length && tokens[newPos].type === 'AND') {
+    newPos++;
+    const right = parseAtom(tokens, newPos);
+    // AND = must comply with all, pick most risky
+    const order = [RISK.LOW, RISK.MEDIUM, RISK.HIGH, RISK.UNKNOWN];
+    result = order.indexOf(result.risk) >= order.indexOf(right.result.risk) ? result : right.result;
+    newPos = right.pos;
+  }
+  return { result, pos: newPos };
+}
+
+function parseAtom(tokens, pos) {
+  if (pos >= tokens.length) return { result: { risk: RISK.UNKNOWN, normalized: null }, pos };
+
+  if (tokens[pos].type === 'LPAREN') {
+    const inner = parseExpression(tokens, pos + 1);
+    // consume RPAREN if present
+    const newPos = inner.pos < tokens.length && tokens[inner.pos].type === 'RPAREN' ? inner.pos + 1 : inner.pos;
+    return { result: inner.result, pos: newPos };
+  }
+
+  if (tokens[pos].type === 'LICENSE') {
+    let licenseId = tokens[pos].value;
+    let newPos = pos + 1;
+    // Handle WITH exception (e.g., GPL-2.0-only WITH Classpath-exception-2.0)
+    if (newPos < tokens.length && tokens[newPos].type === 'WITH') {
+      newPos++; // skip WITH
+      if (newPos < tokens.length && tokens[newPos].type === 'LICENSE') newPos++; // skip exception
+    }
+    return { result: classifyLicense(licenseId), pos: newPos };
+  }
+
+  return { result: { risk: RISK.UNKNOWN, normalized: null }, pos: pos + 1 };
+}
+
 export function classifyExpression(expression) {
   if (!expression) return { risk: RISK.UNKNOWN, normalized: null };
 
-  // Handle SPDX OR — you can choose, so pick least risky
-  if (/\bOR\b/i.test(expression)) {
-    const parts = expression.replace(/[()]/g, '').split(/\s+OR\s+/i);
-    const classified = parts.map(p => classifyLicense(p.trim()));
-    const order = [RISK.LOW, RISK.MEDIUM, RISK.HIGH, RISK.UNKNOWN];
-    classified.sort((a, b) => order.indexOf(a.risk) - order.indexOf(b.risk));
-    return classified[0];
+  const trimmed = expression.trim();
+  // Fast path for simple license IDs (no operators or parens)
+  if (!/[\s()]/.test(trimmed) || (!/ OR /i.test(trimmed) && !/ AND /i.test(trimmed) && !/ WITH /i.test(trimmed))) {
+    return classifyLicense(trimmed);
   }
 
-  // Handle SPDX AND — must comply with all, so pick most risky
-  if (/\bAND\b/i.test(expression)) {
-    const parts = expression.replace(/[()]/g, '').split(/\s+AND\s+/i);
-    const classified = parts.map(p => classifyLicense(p.trim()));
-    const order = [RISK.LOW, RISK.MEDIUM, RISK.HIGH, RISK.UNKNOWN];
-    classified.sort((a, b) => order.indexOf(b.risk) - order.indexOf(a.risk));
-    return classified[0];
-  }
-
-  return classifyLicense(expression);
+  const tokens = tokenize(trimmed);
+  if (tokens.length === 0) return { risk: RISK.UNKNOWN, normalized: null };
+  return parseExpression(tokens, 0).result;
 }
 
 export { RISK };

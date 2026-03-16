@@ -1,6 +1,13 @@
 import { readFile, readdir } from 'fs/promises';
 import { join } from 'path';
 
+const FETCH_TIMEOUT = 10_000;
+
+// PEP 503: normalize name by lowercasing and replacing [-_.] with -
+function normalizeName(name) {
+  return name.toLowerCase().replace(/[-_.]+/g, '-');
+}
+
 export const python = {
   name: 'python',
 
@@ -30,7 +37,7 @@ export const python = {
     const unresolved = [...packages.keys()].filter(name => !resolved.has(name));
     if (unresolved.length > 0) {
       const fetched = await fetchFromPyPI(unresolved);
-      for (const dep of fetched) resolved.set(dep.name.toLowerCase(), dep);
+      for (const dep of fetched) resolved.set(normalizeName(dep.name), dep);
     }
 
     return [...resolved.values()];
@@ -44,7 +51,7 @@ async function parseRequirements(path, packages) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('-')) continue;
       const match = trimmed.match(/^([a-zA-Z0-9._-]+)/);
-      if (match) packages.set(match[1].toLowerCase(), 'latest');
+      if (match) packages.set(normalizeName(match[1]), 'latest');
     }
   } catch {}
 }
@@ -53,9 +60,9 @@ async function parsePipfileLock(path, packages) {
   try {
     const content = JSON.parse(await readFile(path, 'utf-8'));
     for (const section of ['default', 'develop']) {
-      if (!content[section]) continue;
+      if (!content[section] || typeof content[section] !== 'object') continue;
       for (const [name, info] of Object.entries(content[section])) {
-        packages.set(name.toLowerCase(), info.version?.replace('==', '') || 'latest');
+        packages.set(normalizeName(name), info.version?.replace('==', '') || 'latest');
       }
     }
   } catch {}
@@ -69,7 +76,7 @@ async function parsePyproject(path, packages) {
       const deps = depMatch[1].match(/"([^"]+)"/g) || [];
       for (const dep of deps) {
         const match = dep.replace(/"/g, '').match(/^([a-zA-Z0-9._-]+)/);
-        if (match) packages.set(match[1].toLowerCase(), 'latest');
+        if (match) packages.set(normalizeName(match[1]), 'latest');
       }
     }
   } catch {}
@@ -95,9 +102,9 @@ async function resolveLocal(dir, packages) {
               const versionMatch = metadata.match(/^Version:\s*(.+)/m);
               const licenseMatch = metadata.match(/^License:\s*(.+)/m);
               if (nameMatch) {
-                const name = nameMatch[1].trim().toLowerCase();
-                if (packages.has(name)) {
-                  resolved.set(name, {
+                const normalized = normalizeName(nameMatch[1].trim());
+                if (packages.has(normalized)) {
+                  resolved.set(normalized, {
                     name: nameMatch[1].trim(),
                     version: versionMatch?.[1]?.trim() || 'unknown',
                     license: licenseMatch?.[1]?.trim() || null,
@@ -122,13 +129,15 @@ async function fetchFromPyPI(names) {
     const batch = names.slice(i, i + BATCH);
     const promises = batch.map(async name => {
       try {
-        const res = await fetch(`https://pypi.org/pypi/${name}/json`);
+        const res = await fetch(`https://pypi.org/pypi/${encodeURIComponent(name)}/json`, {
+          signal: AbortSignal.timeout(FETCH_TIMEOUT),
+        });
         if (!res.ok) return { name, version: 'unknown', license: null };
         const data = await res.json();
-        let license = data.info.license || null;
+        let license = data.info?.license || null;
         // PyPI sometimes has very long license text instead of SPDX ID — skip those
         if (license && license.length > 100) license = null;
-        return { name: data.info.name || name, version: data.info.version || 'unknown', license };
+        return { name: data.info?.name || name, version: data.info?.version || 'unknown', license };
       } catch {
         return { name, version: 'unknown', license: null };
       }

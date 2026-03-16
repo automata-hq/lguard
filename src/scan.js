@@ -20,6 +20,7 @@ export async function scanProject(targetPath, options = {}) {
 
   const allDeps = [];
   const ignoreSet = new Set(options.ignore || []);
+  const errors = [];
 
   for (const eco of detected) {
     try {
@@ -30,9 +31,13 @@ export async function scanProject(targetPath, options = {}) {
         allDeps.push({ ...dep, risk, ecosystem: eco.name });
       }
     } catch (err) {
-      console.error(`Warning: ${eco.name} scan failed — ${err.message}`);
+      // If ecosystem was explicitly requested, throw hard
+      if (options.ecosystem) throw err;
+      errors.push(`Warning: ${eco.name} scan failed — ${err.message}`);
     }
   }
+
+  for (const e of errors) console.error(e);
 
   const summary = { total: allDeps.length, high: 0, medium: 0, low: 0, unknown: 0 };
   for (const dep of allDeps) summary[dep.risk]++;
