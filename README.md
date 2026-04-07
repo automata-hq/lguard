@@ -47,7 +47,7 @@ lguard --init
 ## Example output
 
 ```
-lguard v0.3.0
+lguard v0.3.1
 
   Path:        /home/user/my-app
   Ecosystems:  npm

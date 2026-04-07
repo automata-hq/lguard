@@ -88,6 +88,9 @@ function classifyLicense(license) {
   if (!license) return { risk: RISK.UNKNOWN, normalized: null };
 
   const normalized = license.trim();
+  if (!normalized || normalized === 'NOASSERTION' || normalized === 'NONE') {
+    return { risk: RISK.UNKNOWN, normalized: null };
+  }
   if (LICENSE_MAP[normalized]) return { risk: LICENSE_MAP[normalized], normalized };
 
   const upper = normalized.toUpperCase();

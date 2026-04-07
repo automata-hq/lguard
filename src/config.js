@@ -55,7 +55,14 @@ function validate(config) {
   if (config.failOn && !['high', 'medium', 'unknown'].includes(config.failOn)) {
     throw new Error('"failOn" must be one of: high, medium, unknown');
   }
-  if (config.overrides && typeof config.overrides !== 'object') {
-    throw new Error('"overrides" must be an object mapping package names to reason strings');
+  if (config.overrides != null) {
+    if (typeof config.overrides !== 'object' || Array.isArray(config.overrides)) {
+      throw new Error('"overrides" must be an object mapping package names to reason strings');
+    }
+    for (const [key, val] of Object.entries(config.overrides)) {
+      if (typeof val !== 'string') {
+        throw new Error(`"overrides.${key}" must be a string reason`);
+      }
+    }
   }
 }

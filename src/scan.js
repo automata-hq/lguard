@@ -91,8 +91,6 @@ export async function scanProject(targetPath, options = {}) {
     if (dep.overrideReason) summary.overrides++;
   }
 
-  const failOn = config?.failOn || options.failOn;
-
   return {
     path: targetPath,
     ecosystems: detected.map(e => e.name),

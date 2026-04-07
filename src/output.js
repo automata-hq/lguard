@@ -1,3 +1,7 @@
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { version } = require('../package.json');
+
 const RED = '\x1b[31m';
 const YELLOW = '\x1b[33m';
 const GREEN = '\x1b[32m';
@@ -37,7 +41,7 @@ function printDep(d, color) {
 }
 
 export function formatResults(results, options = {}) {
-  console.log(`\n${BOLD}lguard${RESET} ${DIM}v0.2.0${RESET}\n`);
+  console.log(`\n${BOLD}lguard${RESET} ${DIM}v${version}${RESET}\n`);
   console.log(`  Path:        ${results.path}`);
   console.log(`  Ecosystems:  ${results.ecosystems.join(', ')}`);
   console.log(`  Total deps:  ${results.summary.total}`);

@@ -62,6 +62,7 @@ async function buildGraph(dir, modules) {
     });
 
     let mainModule = null;
+    const graphSets = {};
     for (const line of stdout.split('\n')) {
       if (!line.trim()) continue;
       const [from, to] = line.split(' ');
@@ -70,8 +71,12 @@ async function buildGraph(dir, modules) {
 
       if (!mainModule && !from.includes('@')) mainModule = fromName;
 
-      if (!graph[fromName]) graph[fromName] = [];
-      graph[fromName].push(toName);
+      if (!graphSets[fromName]) graphSets[fromName] = new Set();
+      graphSets[fromName].add(toName);
+    }
+
+    for (const [key, val] of Object.entries(graphSets)) {
+      graph[key] = [...val];
     }
 
     if (mainModule && graph[mainModule]) {

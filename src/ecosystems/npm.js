@@ -23,41 +23,53 @@ export const npm = {
     ]);
 
     const nodeModules = join(dir, 'node_modules');
-    const deps = [];
-    const graph = {};
-
-    let entries;
     try {
-      entries = await readdir(nodeModules);
+      await readdir(nodeModules);
     } catch (err) {
       if (err.code === 'ENOENT') throw new Error('node_modules not found — run npm/bun/pnpm install first');
       throw err;
     }
 
-    for (const entry of entries) {
-      if (entry.startsWith('.')) continue;
+    const seen = new Map();
+    const graph = {};
+    await scanNodeModules(nodeModules, seen, graph);
 
-      if (entry.startsWith('@')) {
-        const scopedEntries = await readdir(join(nodeModules, entry)).catch(() => []);
-        for (const scopedEntry of scopedEntries) {
-          const pkg = await readPkg(join(nodeModules, entry, scopedEntry, 'package.json'));
-          if (pkg) {
-            deps.push({ name: pkg.name, version: pkg.version, license: pkg.license });
-            graph[pkg.name] = pkg.deps;
-          }
-        }
-      } else {
-        const pkg = await readPkg(join(nodeModules, entry, 'package.json'));
-        if (pkg) {
-          deps.push({ name: pkg.name, version: pkg.version, license: pkg.license });
-          graph[pkg.name] = pkg.deps;
-        }
-      }
-    }
-
-    return { deps, graph, directDeps };
+    return { deps: [...seen.values()], graph, directDeps };
   },
 };
+
+async function scanNodeModules(nmDir, seen, graph) {
+  let entries;
+  try {
+    entries = await readdir(nmDir);
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (entry.startsWith('.')) continue;
+
+    if (entry.startsWith('@')) {
+      const scopedEntries = await readdir(join(nmDir, entry)).catch(() => []);
+      for (const scopedEntry of scopedEntries) {
+        await processPackage(join(nmDir, entry, scopedEntry), seen, graph);
+      }
+    } else {
+      await processPackage(join(nmDir, entry), seen, graph);
+    }
+  }
+}
+
+async function processPackage(pkgDir, seen, graph) {
+  const pkg = await readPkg(join(pkgDir, 'package.json'));
+  if (!pkg) return;
+  const key = `${pkg.name}@${pkg.version}`;
+  if (!seen.has(key)) {
+    seen.set(key, { name: pkg.name, version: pkg.version, license: pkg.license });
+    if (!(pkg.name in graph)) graph[pkg.name] = pkg.deps;
+  }
+  await scanNodeModules(join(pkgDir, 'node_modules'), seen, graph);
+}
 
 async function readPkg(path) {
   try {

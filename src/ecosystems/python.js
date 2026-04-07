@@ -49,7 +49,7 @@ async function parseRequirements(path, packages) {
     const content = await readFile(path, 'utf-8');
     for (const line of content.split('\n')) {
       const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('-')) continue;
+      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('-') || /^(https?:|git[+@])/.test(trimmed)) continue;
       const match = trimmed.match(/^([a-zA-Z0-9._-]+)/);
       if (match) packages.set(normalizeName(match[1]), 'latest');
     }
