@@ -1,0 +1,8 @@
+{
+  "deny": ["AGPL-3.0", "GPL-3.0"],
+  "ignore": ["some-pkg"],
+  "failOn": "high",
+  "overrides": {
+    "other-pkg": "reviewed"
+  }
+}

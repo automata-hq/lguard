@@ -1,0 +1,7 @@
+# main deps
+requests==2.31.0
+Flask>=2.0
+-e ./local-pkg
+git+https://github.com/example/repo.git
+https://example.com/pkg.tar.gz
+SQLAlchemy

@@ -1,0 +1,117 @@
+{
+  "path": "<PATH>",
+  "ecosystems": [
+    "npm"
+  ],
+  "dependencies": [
+    {
+      "name": "@scope/pkg",
+      "version": "1.2.3",
+      "license": "ISC",
+      "risk": "low",
+      "ecosystem": "npm",
+      "direct": true,
+      "chain": null,
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": null
+    },
+    {
+      "name": "dual-pkg",
+      "version": "3.0.0",
+      "license": "(MIT OR GPL-3.0)",
+      "risk": "low",
+      "ecosystem": "npm",
+      "direct": true,
+      "chain": null,
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": null
+    },
+    {
+      "name": "gpl-pkg",
+      "version": "2.0.0",
+      "license": "GPL-3.0",
+      "risk": "high",
+      "ecosystem": "npm",
+      "direct": true,
+      "chain": null,
+      "violation": true,
+      "violationReason": "denied by policy",
+      "overrideReason": null
+    },
+    {
+      "name": "legacy-pkg",
+      "version": "0.5.0",
+      "license": "MIT OR Apache-2.0",
+      "risk": "low",
+      "ecosystem": "npm",
+      "direct": true,
+      "chain": null,
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": null
+    },
+    {
+      "name": "lgpl-pkg",
+      "version": "1.0.0",
+      "license": "LGPL-3.0",
+      "risk": "medium",
+      "ecosystem": "npm",
+      "direct": true,
+      "chain": null,
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": null
+    },
+    {
+      "name": "mit-pkg",
+      "version": "1.0.0",
+      "license": "MIT",
+      "risk": "low",
+      "ecosystem": "npm",
+      "direct": true,
+      "chain": null,
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": null
+    },
+    {
+      "name": "parent-pkg",
+      "version": "1.0.0",
+      "license": "Apache-2.0",
+      "risk": "low",
+      "ecosystem": "npm",
+      "direct": true,
+      "chain": null,
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": null
+    },
+    {
+      "name": "transitive-gpl",
+      "version": "1.0.0",
+      "license": "AGPL-3.0",
+      "risk": "high",
+      "ecosystem": "npm",
+      "direct": false,
+      "chain": [
+        "parent-pkg",
+        "transitive-gpl"
+      ],
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": "Reviewed — internal tool only"
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "high": 2,
+    "medium": 1,
+    "low": 5,
+    "unknown": 0,
+    "violations": 1,
+    "overrides": 1
+  },
+  "hasConfig": true
+}

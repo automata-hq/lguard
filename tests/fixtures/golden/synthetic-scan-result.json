@@ -1,0 +1,98 @@
+{
+  "path": "/fake/project",
+  "ecosystems": [
+    "npm",
+    "cargo"
+  ],
+  "dependencies": [
+    {
+      "name": "evil-lib",
+      "version": "2.0.0",
+      "license": "AGPL-3.0",
+      "risk": "high",
+      "ecosystem": "npm",
+      "direct": false,
+      "chain": [
+        "express",
+        "middleware-x",
+        "evil-lib"
+      ],
+      "violation": true,
+      "violationReason": "denied by policy",
+      "overrideReason": null
+    },
+    {
+      "name": "hostile\u001b[31m-pkg",
+      "version": "1.0.0",
+      "license": "GPL-2.0\u0007",
+      "risk": "high",
+      "ecosystem": "npm",
+      "direct": true,
+      "chain": null,
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": null
+    },
+    {
+      "name": "weak-lib",
+      "version": "0.9.0",
+      "license": "LGPL-3.0-or-later",
+      "risk": "medium",
+      "ecosystem": "cargo",
+      "direct": false,
+      "chain": [
+        "sharp",
+        "weak-lib"
+      ],
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": "Dynamically linked - LGPL allows this use"
+    },
+    {
+      "name": "mystery-pkg",
+      "version": "0.0.1",
+      "license": null,
+      "risk": "unknown",
+      "ecosystem": "npm",
+      "direct": true,
+      "chain": null,
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": null
+    },
+    {
+      "name": "nice-pkg",
+      "version": "4.2.0",
+      "license": "MIT",
+      "risk": "low",
+      "ecosystem": "npm",
+      "direct": true,
+      "chain": null,
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": null
+    },
+    {
+      "name": "fine-pkg",
+      "version": "1.1.0",
+      "license": "Apache-2.0",
+      "risk": "low",
+      "ecosystem": "cargo",
+      "direct": false,
+      "chain": [],
+      "violation": false,
+      "violationReason": null,
+      "overrideReason": null
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "high": 2,
+    "medium": 1,
+    "low": 2,
+    "unknown": 1,
+    "violations": 1,
+    "overrides": 1
+  },
+  "hasConfig": true
+}

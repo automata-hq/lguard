@@ -1,0 +1,30 @@
+
+[1mlguard[0m [2mv0.3.1[0m
+
+  Path:        /fake/project
+  Ecosystems:  npm, cargo
+  Total deps:  6
+  Config:      .lguardrc
+
+[35m[1m  POLICY VIOLATIONS[0m [35m— 1 package(s)[0m
+    evil-lib@2.0.0                                [35mAGPL-3.0            [0m [2m[npm][0m [2m(transitive)[0m [31mVIOLATION[0m
+      [2m└─ express > middleware-x > evil-lib[0m
+      [35mdenied by policy[0m
+
+[31m[1m  HIGH RISK (copyleft)[0m [31m— 2 package(s)[0m
+    evil-lib@2.0.0                                [31mAGPL-3.0            [0m [2m[npm][0m [2m(transitive)[0m [31mVIOLATION[0m
+      [2m└─ express > middleware-x > evil-lib[0m
+    hostile[31m-pkg@1.0.0                         [31mGPL-2.0             [0m [2m[npm][0m
+
+[33m[1m  MEDIUM RISK (weak copyleft)[0m [33m— 1 package(s)[0m
+    weak-lib@0.9.0                                [33mLGPL-3.0-or-later   [0m [2m[cargo][0m [2m(transitive)[0m [32moverridden[0m
+      [2m└─ sharp > weak-lib[0m
+      [2m"Dynamically linked - LGPL allows this use"[0m
+
+[90m[1m  UNKNOWN LICENSE[0m [90m— 1 package(s)[0m
+    mystery-pkg@0.0.1                             [90mNONE                [0m [2m[npm][0m
+
+[32m  LOW RISK (permissive) — 2 package(s) [2m(use --all to show)[0m
+
+  [1mSummary:[0m [31m2 high[0m, [33m1 medium[0m, [90m1 unknown[0m, [32m2 permissive[0m [35m| 1 policy violation(s)[0m [2m| 1 overridden[0m
+

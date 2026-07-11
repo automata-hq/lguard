@@ -1,0 +1,12 @@
+{
+  "default": {
+    "django": {
+      "version": "==5.0.1"
+    }
+  },
+  "develop": {
+    "pytest": {
+      "version": "==8.0.0"
+    }
+  }
+}

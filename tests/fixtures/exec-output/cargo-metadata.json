@@ -1,0 +1,56 @@
+{
+  "packages": [
+    {
+      "id": "my-app 0.1.0 (path+file:///ws/my-app)",
+      "name": "my-app",
+      "version": "0.1.0",
+      "license": null
+    },
+    {
+      "id": "serde 1.0.200 (registry+https://github.com/rust-lang/crates.io-index)",
+      "name": "serde",
+      "version": "1.0.200",
+      "license": "MIT OR Apache-2.0"
+    },
+    {
+      "id": "gpl-crate 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+      "name": "gpl-crate",
+      "version": "0.3.0",
+      "license": "GPL-3.0"
+    },
+    {
+      "id": "itoa 1.0.11 (registry+https://github.com/rust-lang/crates.io-index)",
+      "name": "itoa",
+      "version": "1.0.11",
+      "license": "MIT"
+    }
+  ],
+  "workspace_members": [
+    "my-app 0.1.0 (path+file:///ws/my-app)"
+  ],
+  "resolve": {
+    "nodes": [
+      {
+        "id": "my-app 0.1.0 (path+file:///ws/my-app)",
+        "deps": [
+          { "name": "serde", "pkg": "serde 1.0.200 (registry+https://github.com/rust-lang/crates.io-index)" },
+          { "name": "gpl-crate", "pkg": "gpl-crate 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" }
+        ]
+      },
+      {
+        "id": "serde 1.0.200 (registry+https://github.com/rust-lang/crates.io-index)",
+        "deps": [
+          { "name": "itoa", "pkg": "itoa 1.0.11 (registry+https://github.com/rust-lang/crates.io-index)" }
+        ]
+      },
+      {
+        "id": "gpl-crate 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+        "deps": []
+      },
+      {
+        "id": "itoa 1.0.11 (registry+https://github.com/rust-lang/crates.io-index)",
+        "deps": []
+      }
+    ]
+  }
+}

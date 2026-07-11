@@ -1,0 +1,10 @@
+[project]
+name = "py-fixture"
+version = "0.1.0"
+dependencies = [
+  "pydantic>=2.0",
+  "Foo_Bar.baz",
+]
+
+[tool.other]
+dependencies = ["should-not-be-picked-up"]

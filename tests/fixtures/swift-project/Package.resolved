@@ -1,0 +1,30 @@
+{
+  "pins": [
+    {
+      "identity": "swift-algorithms",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/apple/swift-algorithms.git",
+      "state": {
+        "revision": "f6919dfc309e7f1b56224378b11e28bab5bccc42",
+        "version": "1.2.0"
+      }
+    },
+    {
+      "identity": "revision-pkg",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/example/revision-pkg.git",
+      "state": {
+        "revision": "abcdef1234567890abcdef1234567890abcdef12"
+      }
+    },
+    {
+      "identity": "nongh-pkg",
+      "kind": "remoteSourceControl",
+      "location": "https://gitlab.com/example/nongh-pkg.git",
+      "state": {
+        "version": "0.1.0"
+      }
+    }
+  ],
+  "version": 2
+}
