@@ -2,7 +2,7 @@
 
 Scan your project's dependencies for open source license risks. Catches copyleft licenses (AGPL, GPL, SSPL) that can force you to open-source your code before they become a problem.
 
-Zero dependencies. Works across multiple ecosystems.
+Zero dependencies. Works across multiple ecosystems. Runs on Node.js >= 20 and Bun.
 
 ## Install
 
@@ -47,7 +47,7 @@ lguard --init
 ## Example output
 
 ```
-lguard v0.3.1
+lguard v0.4.0
 
   Path:        /home/user/my-app
   Ecosystems:  npm
@@ -194,6 +194,22 @@ With a `.lguardrc` in your repo, lguard automatically picks it up. Policy violat
 | Variable | Used by |
 |----------|---------|
 | `GITHUB_TOKEN` | Swift ecosystem — avoids GitHub API rate limits when fetching license info |
+
+## Development
+
+The source is TypeScript (`src/`), compiled by `tsc` to `dist/` — which is what npm ships and what the `lguard` bin runs. The published package has zero runtime dependencies; dev tooling is exactly three exact-pinned devDependencies (`typescript`, `@biomejs/biome`, `@types/node`). [Bun](https://bun.sh) is the package manager and test runner.
+
+```sh
+bun install          # install dev tooling (bun.lock is committed)
+bun test             # run the test suite
+bun run typecheck    # tsc --noEmit
+bun run lint         # biome check
+bun run build        # emit dist/
+bun run check        # typecheck + lint + test
+bun src/cli.ts --    # run the CLI from source during development
+```
+
+`prepublishOnly` runs the full check + build, so publishing requires bun. CI runs the suite and smoke-tests the built `dist/cli.js` on Node 20/22/24 and Bun.
 
 ## License
 

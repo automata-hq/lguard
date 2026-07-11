@@ -1,0 +1,18 @@
+{
+  "name": "npm-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "mit-pkg": "^1.0.0",
+    "gpl-pkg": "^2.0.0",
+    "@scope/pkg": "^1.2.3",
+    "dual-pkg": "^3.0.0",
+    "parent-pkg": "^1.0.0"
+  },
+  "devDependencies": {
+    "lgpl-pkg": "^1.0.0"
+  },
+  "optionalDependencies": {
+    "legacy-pkg": "^0.5.0"
+  }
+}

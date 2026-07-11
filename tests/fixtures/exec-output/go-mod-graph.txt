@@ -1,0 +1,3 @@
+example.com/myapp github.com/pkg/errors@v0.9.1
+example.com/myapp golang.org/x/text@v0.14.0
+github.com/pkg/errors@v0.9.1 golang.org/x/text@v0.14.0

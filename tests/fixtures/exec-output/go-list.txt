@@ -1,0 +1,19 @@
+{
+	"Path": "example.com/myapp",
+	"Main": true,
+	"Dir": "/ws/myapp",
+	"GoMod": "/ws/myapp/go.mod",
+	"GoVersion": "1.22"
+}
+{
+	"Path": "github.com/pkg/errors",
+	"Version": "v0.9.1",
+	"Time": "2020-01-14T19:47:44Z",
+	"Indirect": false
+}
+{
+	"Path": "golang.org/x/text",
+	"Version": "v0.14.0",
+	"Time": "2023-11-15T21:59:12Z",
+	"Indirect": true
+}

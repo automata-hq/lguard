@@ -1,0 +1,27 @@
+
+[1mlguard[0m [2mv0.3.1[0m
+
+  Path:        /Users/afeldman/dev/AutomataHQ/lguard/tests/fixtures/npm-project
+  Ecosystems:  npm
+  Total deps:  9
+
+[31m[1m  HIGH RISK (copyleft)[0m [31m— 2 package(s)[0m
+    gpl-pkg@2.0.0                                 [31mGPL-3.0             [0m [2m[npm][0m
+    transitive-gpl@1.0.0                          [31mAGPL-3.0            [0m [2m[npm][0m [2m(transitive)[0m
+      [2m└─ parent-pkg > transitive-gpl[0m
+
+[33m[1m  MEDIUM RISK (weak copyleft)[0m [33m— 1 package(s)[0m
+    lgpl-pkg@1.0.0                                [33mLGPL-3.0            [0m [2m[npm][0m
+
+[90m[1m  UNKNOWN LICENSE[0m [90m— 1 package(s)[0m
+    no-license-pkg@0.0.1                          [90mNONE                [0m [2m[npm][0m [2m(transitive)[0m
+
+[32m[1m  LOW RISK (permissive)[0m [32m— 5 package(s)[0m
+    @scope/pkg@1.2.3                              [32mISC                 [0m [2m[npm][0m
+    dual-pkg@3.0.0                                [32m(MIT OR GPL-3.0)    [0m [2m[npm][0m
+    legacy-pkg@0.5.0                              [32mMIT OR Apache-2.0   [0m [2m[npm][0m
+    mit-pkg@1.0.0                                 [32mMIT                 [0m [2m[npm][0m
+    parent-pkg@1.0.0                              [32mApache-2.0          [0m [2m[npm][0m
+
+  [1mSummary:[0m [31m2 high[0m, [33m1 medium[0m, [90m1 unknown[0m, [32m5 permissive[0m
+

@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun test
+      - run: bun run build
+
+  smoke-node:
+    needs: checks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "${{ matrix.node }}"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: node dist/cli.js --help
+      - name: Scan the offline npm fixture and diff against the v0.3.1 golden
+        run: |
+          node dist/cli.js tests/fixtures/npm-project --json \
+            | jq '.path = "<PATH>" | .dependencies |= sort_by(.name)' \
+            | diff - tests/fixtures/golden/npm-project.json
+      - name: Exit-code policy holds
+        run: |
+          rc=0
+          node dist/cli.js tests/fixtures/npm-project --fail-on=high || rc=$?
+          test "$rc" -eq 1
+          rc=0
+          node dist/cli.js tests/fixtures/npm-project-config --json > /dev/null || rc=$?
+          test "$rc" -eq 1
+
+  smoke-bun:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun dist/cli.js --help
+      - name: Scan the offline npm fixture and diff against the v0.3.1 golden
+        run: |
+          bun dist/cli.js tests/fixtures/npm-project --json \
+            | jq '.path = "<PATH>" | .dependencies |= sort_by(.name)' \
+            | diff - tests/fixtures/golden/npm-project.json
+      - name: Exit-code policy holds
+        run: |
+          rc=0
+          bun dist/cli.js tests/fixtures/npm-project --fail-on=high || rc=$?
+          test "$rc" -eq 1
