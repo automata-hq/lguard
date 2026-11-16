@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { FETCH_BATCH_SIZE, FETCH_TIMEOUT_MS } from '../constants.js';
+import { FETCH_CONCURRENCY, FETCH_TIMEOUT_MS } from '../constants.js';
+import { mapLimit } from '../limit.js';
 import type { Dep, Ecosystem } from '../types.js';
 
 interface GemEntry {
@@ -20,7 +21,7 @@ export const ruby: Ecosystem = {
     }
   },
 
-  async scan(dir) {
+  async scan(dir, context) {
     const content = await readFile(join(dir, 'Gemfile.lock'), 'utf-8');
     const { gems, graph } = parseGemfileLock(content);
 
@@ -29,11 +30,18 @@ export const ruby: Ecosystem = {
     // Parse Gemfile for direct deps
     const directDeps = await parseGemfile(dir);
 
-    const results: Dep[] = [];
+    if (context?.offline) {
+      return {
+        deps: gems.map(({ name, version }) => ({ name, version, license: null })),
+        graph,
+        directDeps,
+      };
+    }
 
-    for (let i = 0; i < gems.length; i += FETCH_BATCH_SIZE) {
-      const batch = gems.slice(i, i + FETCH_BATCH_SIZE);
-      const promises = batch.map(async ({ name, version }): Promise<Dep> => {
+    const deps = await mapLimit(
+      gems,
+      FETCH_CONCURRENCY,
+      async ({ name, version }): Promise<Dep> => {
         try {
           const encodedName = encodeURIComponent(name);
           const encodedVersion = encodeURIComponent(version);
@@ -48,11 +56,10 @@ export const ruby: Ecosystem = {
         } catch {
           return { name, version, license: null };
         }
-      });
-      results.push(...(await Promise.all(promises)));
-    }
+      },
+    );
 
-    return { deps: results, graph, directDeps };
+    return { deps, graph, directDeps };
   },
 };
 

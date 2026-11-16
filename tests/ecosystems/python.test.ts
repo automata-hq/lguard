@@ -105,4 +105,21 @@ describe('python.scan', () => {
     await writeFile(join(tmp, 'requirements.txt'), '# only comments\n');
     expect(python.scan(tmp)).rejects.toThrow('No Python dependencies found');
   });
+
+  test('offline: no PyPI call; local metadata kept, the rest has no license', async () => {
+    const requested: string[] = [];
+    restoreFetch = stubFetch((url) => {
+      requested.push(url);
+      return jsonResponse({}, 500);
+    });
+
+    const { deps } = await python.scan(PY_PROJECT, { offline: true });
+    const byName = Object.fromEntries(deps.map((d) => [d.name, d] as const));
+
+    expect(requested).toEqual([]);
+    expect(byName.requests?.license).toBe('Apache-2.0');
+    expect(byName.flask).toEqual({ name: 'flask', version: 'unknown', license: null });
+    expect(byName.sqlalchemy).toEqual({ name: 'sqlalchemy', version: 'unknown', license: null });
+    expect(deps).toHaveLength(7);
+  });
 });

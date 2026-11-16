@@ -68,6 +68,12 @@ describe('main — in-process exit codes', () => {
     expect(overridden.overrideReason).toBe('Reviewed — internal tool only');
   });
 
+  test('--offline is accepted and named in the output', async () => {
+    expect(await main([NPM_PROJECT, '--offline'])).toBe(0);
+    expect(logs.some((line) => line.includes('offline (no network call)'))).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
   test('--json emits parseable JSON on stdout', async () => {
     expect(await main([NPM_PROJECT, '--json'])).toBe(0);
     const parsed = JSON.parse(logs.join('\n'));

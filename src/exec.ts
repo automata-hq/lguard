@@ -6,6 +6,7 @@ const execFileAsync = promisify(execFile);
 export interface RunOptions {
   cwd?: string;
   maxBuffer?: number;
+  env?: NodeJS.ProcessEnv;
 }
 
 export function runCommand(

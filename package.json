@@ -1,6 +1,6 @@
 {
   "name": "lguard",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Scan dependencies for open source license risks across npm, cargo, pip, gems, go, and swift",
   "type": "module",
   "bin": {
@@ -19,7 +19,7 @@
     "check": "bun run typecheck && bun run lint && bun test",
     "prepublishOnly": "bun run check && bun run build"
   },
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.4",
   "keywords": [
     "license",
     "audit",

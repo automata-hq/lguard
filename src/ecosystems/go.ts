@@ -1,7 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { EXEC_MAX_BUFFER } from '../constants.js';
+import { EXEC_MAX_BUFFER, FS_CONCURRENCY, GO_OFFLINE_ENV, UNKNOWN_VERSION } from '../constants.js';
 import { runCommand } from '../exec.js';
+import { mapLimit } from '../limit.js';
 import type { Dep, Ecosystem } from '../types.js';
 
 interface GoModule {
@@ -22,12 +23,15 @@ export const go: Ecosystem = {
     }
   },
 
-  async scan(dir) {
+  async scan(dir, context) {
+    const env = context?.offline ? { ...process.env, ...GO_OFFLINE_ENV } : undefined;
+    const withEnv = env ? { env } : {};
     let stdout: string;
     try {
       ({ stdout } = await runCommand('go', ['list', '-m', '-json', 'all'], {
         cwd: dir,
         maxBuffer: EXEC_MAX_BUFFER,
+        ...withEnv,
       }));
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT')
@@ -39,19 +43,25 @@ export const go: Ecosystem = {
 
     let modCache = '';
     try {
-      ({ stdout: modCache } = await runCommand('go', ['env', 'GOMODCACHE'], { cwd: dir }));
+      ({ stdout: modCache } = await runCommand('go', ['env', 'GOMODCACHE'], {
+        cwd: dir,
+        ...withEnv,
+      }));
       modCache = modCache.trim();
     } catch {}
 
     // Build graph from go mod graph
-    const { graph, directDeps } = await buildGraph(dir, modules);
+    const { graph, directDeps } = await buildGraph(dir, modules, env);
 
-    const deps: Dep[] = [];
-    for (const mod of modules) {
-      if (mod.Main) continue;
-      const license = modCache ? await findLicense(modCache, mod.Path, mod.Version) : null;
-      deps.push({ name: mod.Path, version: mod.Version || 'unknown', license });
-    }
+    const deps = await mapLimit(
+      modules.filter((mod) => !mod.Main),
+      FS_CONCURRENCY,
+      async (mod): Promise<Dep> => ({
+        name: mod.Path,
+        version: mod.Version || UNKNOWN_VERSION,
+        license: modCache ? await findLicense(modCache, mod.Path, mod.Version) : null,
+      }),
+    );
 
     return { deps, graph, directDeps };
   },
@@ -60,6 +70,7 @@ export const go: Ecosystem = {
 async function buildGraph(
   dir: string,
   modules: GoModule[],
+  env: NodeJS.ProcessEnv | undefined,
 ): Promise<{ graph: Record<string, string[]>; directDeps: Set<string> }> {
   const graph: Record<string, string[]> = {};
   const directDeps = new Set<string>();
@@ -68,6 +79,7 @@ async function buildGraph(
     const { stdout } = await runCommand('go', ['mod', 'graph'], {
       cwd: dir,
       maxBuffer: EXEC_MAX_BUFFER,
+      ...(env ? { env } : {}),
     });
 
     let mainModule: string | null = null;
@@ -106,24 +118,36 @@ async function buildGraph(
 function parseGoListOutput(stdout: string): GoModule[] {
   const modules: GoModule[] = [];
   let depth = 0;
-  let current = '';
+  let start = 0;
 
-  for (const char of stdout) {
-    if (char === '{') depth++;
-    if (depth > 0) current += char;
-    if (char === '}') {
+  for (let i = 0; i < stdout.length; i++) {
+    const char = stdout[i];
+    if (char === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (char === '}' && depth > 0) {
       depth--;
       if (depth === 0) {
         try {
-          modules.push(JSON.parse(current));
+          modules.push(JSON.parse(stdout.slice(start, i + 1)));
         } catch {}
-        current = '';
       }
     }
   }
 
   return modules;
 }
+
+const LICENSE_FILES = [
+  'LICENSE',
+  'LICENSE.md',
+  'LICENSE.txt',
+  'LICENCE',
+  'LICENCE.md',
+  'LICENCE.txt',
+  'COPYING',
+  'COPYING.md',
+];
 
 async function findLicense(
   modCache: string,
@@ -132,21 +156,12 @@ async function findLicense(
 ): Promise<string | null> {
   if (!version) return null;
   const modDir = join(modCache, `${modPath}@${version}`);
-  const names = [
-    'LICENSE',
-    'LICENSE.md',
-    'LICENSE.txt',
-    'LICENCE',
-    'LICENCE.md',
-    'LICENCE.txt',
-    'COPYING',
-    'COPYING.md',
-  ];
+  const files = new Set(await readdir(modDir).catch(() => [] as string[]));
 
-  for (const name of names) {
+  for (const name of LICENSE_FILES) {
+    if (!files.has(name)) continue;
     try {
-      const content = await readFile(join(modDir, name), 'utf-8');
-      return identifyLicense(content);
+      return identifyLicense(await readFile(join(modDir, name), 'utf-8'));
     } catch {}
   }
 

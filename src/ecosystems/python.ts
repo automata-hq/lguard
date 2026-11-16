@@ -1,7 +1,15 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { FETCH_BATCH_SIZE, FETCH_TIMEOUT_MS } from '../constants.js';
+import {
+  FETCH_CONCURRENCY,
+  FETCH_TIMEOUT_MS,
+  FS_CONCURRENCY,
+  UNKNOWN_VERSION,
+} from '../constants.js';
+import { limiter, mapLimit } from '../limit.js';
 import type { Dep, Ecosystem } from '../types.js';
+
+const LATEST = 'latest';
 
 function normalizeName(name: string): string {
   return name.toLowerCase().replace(/[-_.]+/g, '-');
@@ -20,7 +28,7 @@ export const python: Ecosystem = {
     return false;
   },
 
-  async scan(dir) {
+  async scan(dir, context) {
     const packages = new Map<string, string>();
 
     await parseRequirements(join(dir, 'requirements.txt'), packages);
@@ -32,7 +40,10 @@ export const python: Ecosystem = {
     const resolved = await resolveLocal(dir, packages);
 
     const unresolved = [...packages.keys()].filter((name) => !resolved.has(name));
-    if (unresolved.length > 0) {
+    if (unresolved.length > 0 && context?.offline) {
+      for (const name of unresolved)
+        resolved.set(name, unresolvedOffline(name, packages.get(name)));
+    } else if (unresolved.length > 0) {
       const fetched = await fetchFromPyPI(unresolved);
       for (const dep of fetched) resolved.set(normalizeName(dep.name), dep);
     }
@@ -57,7 +68,7 @@ async function parseRequirements(path: string, packages: Map<string, string>): P
       )
         continue;
       const match = trimmed.match(/^([a-zA-Z0-9._-]+)/);
-      if (match?.[1]) packages.set(normalizeName(match[1]), 'latest');
+      if (match?.[1]) packages.set(normalizeName(match[1]), LATEST);
     }
   } catch {}
 }
@@ -74,7 +85,7 @@ async function parsePipfileLock(path: string, packages: Map<string, string>): Pr
       const entries = content[section];
       if (!entries || typeof entries !== 'object') continue;
       for (const [name, info] of Object.entries(entries)) {
-        packages.set(normalizeName(name), info.version?.replace('==', '') || 'latest');
+        packages.set(normalizeName(name), info.version?.replace('==', '') || LATEST);
       }
     }
   } catch {}
@@ -88,7 +99,7 @@ async function parsePyproject(path: string, packages: Map<string, string>): Prom
       const deps = depMatch[1].match(/"([^"]+)"/g) || [];
       for (const dep of deps) {
         const match = dep.replace(/"/g, '').match(/^([a-zA-Z0-9._-]+)/);
-        if (match?.[1]) packages.set(normalizeName(match[1]), 'latest');
+        if (match?.[1]) packages.set(normalizeName(match[1]), LATEST);
       }
     }
   } catch {}
@@ -97,67 +108,81 @@ async function parsePyproject(path: string, packages: Map<string, string>): Prom
 async function resolveLocal(dir: string, packages: Map<string, string>): Promise<Map<string, Dep>> {
   const resolved = new Map<string, Dep>();
   const venvPaths = [join(dir, '.venv', 'lib'), join(dir, 'venv', 'lib'), join(dir, 'env', 'lib')];
+  const io = limiter(FS_CONCURRENCY);
+  const list = (path: string) => io(() => readdir(path)).catch(() => [] as string[]);
 
-  for (const venvLib of venvPaths) {
-    try {
-      const pythonDirs = await readdir(venvLib);
-      for (const pyDir of pythonDirs) {
-        if (!pyDir.startsWith('python')) continue;
-        const sitePackages = join(venvLib, pyDir, 'site-packages');
-        try {
-          const entries = await readdir(sitePackages);
-          for (const entry of entries) {
-            if (!entry.endsWith('.dist-info')) continue;
-            try {
-              const metadata = await readFile(join(sitePackages, entry, 'METADATA'), 'utf-8');
-              const nameMatch = metadata.match(/^Name:\s*(.+)/m);
-              const versionMatch = metadata.match(/^Version:\s*(.+)/m);
-              const licenseMatch = metadata.match(/^License:\s*(.+)/m);
-              if (nameMatch?.[1]) {
-                const normalized = normalizeName(nameMatch[1].trim());
-                if (packages.has(normalized)) {
-                  resolved.set(normalized, {
-                    name: nameMatch[1].trim(),
-                    version: versionMatch?.[1]?.trim() || 'unknown',
-                    license: licenseMatch?.[1]?.trim() || null,
-                  });
-                }
-              }
-            } catch {}
-          }
-        } catch {}
-      }
-    } catch {}
+  const sitePackages = (
+    await Promise.all(
+      venvPaths.map(async (venvLib) =>
+        (
+          await list(venvLib)
+        )
+          .filter((pyDir) => pyDir.startsWith('python'))
+          .map((pyDir) => join(venvLib, pyDir, 'site-packages')),
+      ),
+    )
+  ).flat();
+
+  const metadataFiles = (
+    await Promise.all(
+      sitePackages.map(async (site) =>
+        (
+          await list(site)
+        )
+          .filter((entry) => entry.endsWith('.dist-info'))
+          .map((entry) => join(site, entry, 'METADATA')),
+      ),
+    )
+  ).flat();
+
+  const metadata = await Promise.all(
+    metadataFiles.map((path) => io(() => readFile(path, 'utf-8')).catch(() => null)),
+  );
+
+  for (const text of metadata) {
+    const name = text?.match(/^Name:\s*(.+)/m)?.[1]?.trim();
+    if (!text || !name) continue;
+    const normalized = normalizeName(name);
+    if (!packages.has(normalized)) continue;
+    resolved.set(normalized, {
+      name,
+      version: text.match(/^Version:\s*(.+)/m)?.[1]?.trim() || UNKNOWN_VERSION,
+      license: text.match(/^License:\s*(.+)/m)?.[1]?.trim() || null,
+    });
   }
 
   return resolved;
+}
+
+function unresolvedOffline(name: string, declared: string | undefined): Dep {
+  const version = declared === undefined || declared === LATEST ? UNKNOWN_VERSION : declared;
+
+  return { name, version, license: null };
 }
 
 interface PyPIResponse {
   info?: { name?: string; version?: string; license?: string | null };
 }
 
-async function fetchFromPyPI(names: string[]): Promise<Dep[]> {
-  const results: Dep[] = [];
+const MAX_LICENSE_LENGTH = 100;
 
-  for (let i = 0; i < names.length; i += FETCH_BATCH_SIZE) {
-    const batch = names.slice(i, i + FETCH_BATCH_SIZE);
-    const promises = batch.map(async (name): Promise<Dep> => {
-      try {
-        const res = await fetch(`https://pypi.org/pypi/${encodeURIComponent(name)}/json`, {
-          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        });
-        if (!res.ok) return { name, version: 'unknown', license: null };
-        const data = (await res.json()) as PyPIResponse;
-        let license = data.info?.license || null;
-        if (license && license.length > 100) license = null;
-        return { name: data.info?.name || name, version: data.info?.version || 'unknown', license };
-      } catch {
-        return { name, version: 'unknown', license: null };
-      }
-    });
-    results.push(...(await Promise.all(promises)));
-  }
-
-  return results;
+function fetchFromPyPI(names: string[]): Promise<Dep[]> {
+  return mapLimit(names, FETCH_CONCURRENCY, async (name): Promise<Dep> => {
+    try {
+      const res = await fetch(`https://pypi.org/pypi/${encodeURIComponent(name)}/json`, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (!res.ok) return { name, version: UNKNOWN_VERSION, license: null };
+      const data = (await res.json()) as PyPIResponse;
+      let license = data.info?.license || null;
+      if (license && license.length > MAX_LICENSE_LENGTH) license = null;
+      return {
+        name: data.info?.name || name,
+        version: data.info?.version || UNKNOWN_VERSION,
+        license,
+      };
+    } catch {
+      return { name, version: UNKNOWN_VERSION, license: null };
+    }
+  });
 }

@@ -1,9 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { FETCH_TIMEOUT_MS } from '../constants.js';
+import { FETCH_CONCURRENCY, FETCH_TIMEOUT_MS, UNKNOWN_VERSION } from '../constants.js';
+import { mapLimit } from '../limit.js';
 import type { Dep, Ecosystem } from '../types.js';
 
 const GH_REPO_RE = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+const REVISION_LENGTH = 8;
 
 interface Pin {
   identity?: string;
@@ -30,7 +32,7 @@ export const swift: Ecosystem = {
     }
   },
 
-  async scan(dir) {
+  async scan(dir, context) {
     let resolved: PackageResolved;
     try {
       resolved = JSON.parse(await readFile(join(dir, 'Package.resolved'), 'utf-8'));
@@ -39,28 +41,23 @@ export const swift: Ecosystem = {
     }
 
     const pins = resolved.pins || resolved.object?.pins || [];
-    const deps: Dep[] = [];
 
-    // All SwiftPM resolved deps are considered direct (flat resolution)
-    const directDeps = new Set<string>();
-
-    for (const pin of pins) {
+    const deps = await mapLimit(pins, FETCH_CONCURRENCY, async (pin): Promise<Dep> => {
       const name =
         pin.identity || pin.package || extractName(pin.location || pin.repositoryURL || '');
-      const version = pin.state?.version || pin.state?.revision?.slice(0, 8) || 'unknown';
+      const version =
+        pin.state?.version || pin.state?.revision?.slice(0, REVISION_LENGTH) || UNKNOWN_VERSION;
       const url = pin.location || pin.repositoryURL || '';
 
-      let license: string | null = null;
-      const ghMatch = url.match(/github\.com\/([^/]+\/[^/.]+)/);
-      if (ghMatch?.[1] && GH_REPO_RE.test(ghMatch[1])) {
-        license = await fetchGitHubLicense(ghMatch[1]);
-      }
+      const repo = url.match(/github\.com\/([^/]+\/[^/.]+)/)?.[1];
+      const license =
+        !context?.offline && repo && GH_REPO_RE.test(repo) ? await fetchGitHubLicense(repo) : null;
 
-      deps.push({ name, version, license });
-      directDeps.add(name);
-    }
+      return { name, version, license };
+    });
 
-    return { deps, graph: {}, directDeps };
+    // All SwiftPM resolved deps are considered direct (flat resolution)
+    return { deps, graph: {}, directDeps: new Set(deps.map((d) => d.name)) };
   },
 };
 

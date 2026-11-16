@@ -75,4 +75,31 @@ describe('ruby.scan', () => {
     await writeFile(join(tmp, 'Gemfile.lock'), 'GEM\n  specs:\n');
     expect(ruby.scan(tmp)).rejects.toThrow('No gems found in Gemfile.lock');
   });
+
+  test('offline: no RubyGems call; versions and graph kept, licenses null', async () => {
+    const requested: string[] = [];
+    restoreFetch = stubFetch((url) => {
+      requested.push(url);
+      return jsonResponse({}, 500);
+    });
+
+    const {
+      deps,
+      graph = {},
+      directDeps = new Set<string>(),
+    } = await ruby.scan(RUBY_PROJECT, {
+      offline: true,
+    });
+
+    expect(requested).toEqual([]);
+    expect(deps).toHaveLength(4);
+    expect(deps.find((d) => d.name === 'rails')).toEqual({
+      name: 'rails',
+      version: '7.1.0',
+      license: null,
+    });
+    expect(deps.every((d) => d.license === null)).toBe(true);
+    expect(graph.rails).toEqual(['actionpack', 'activesupport']);
+    expect([...directDeps].sort()).toEqual(['nokogiri', 'rails']);
+  });
 });

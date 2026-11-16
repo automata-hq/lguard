@@ -99,6 +99,11 @@ describe('scanProject — npm fixture (offline)', () => {
     expect(result.summary.violations).toBe(4);
   });
 
+  test('offline is in the result only in offline mode', async () => {
+    expect((await scanProject(NPM_PROJECT, { offline: true })).offline).toBe(true);
+    expect('offline' in (await scanProject(NPM_PROJECT, {}))).toBe(false);
+  });
+
   test('hasConfig reflects whether a config was passed', async () => {
     expect((await scanProject(NPM_PROJECT, {})).hasConfig).toBe(false);
     expect((await scanProject(NPM_PROJECT, { config: { deny: ['X'] } })).hasConfig).toBe(true);

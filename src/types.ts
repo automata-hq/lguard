@@ -13,10 +13,14 @@ export interface EcosystemScanResult {
   directDeps?: Set<string>;
 }
 
+export interface ScanContext {
+  offline: boolean;
+}
+
 export interface Ecosystem {
   name: string;
   detect(dir: string): Promise<boolean>;
-  scan(dir: string): Promise<EcosystemScanResult>;
+  scan(dir: string, context?: ScanContext): Promise<EcosystemScanResult>;
 }
 
 export interface Config {
@@ -58,4 +62,5 @@ export interface ScanResult {
   dependencies: ScannedDependency[];
   summary: Summary;
   hasConfig: boolean;
+  offline?: true;
 }

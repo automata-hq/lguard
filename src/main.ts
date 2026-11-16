@@ -4,7 +4,16 @@ import { initConfig, loadConfig } from './config.js';
 import { formatResults } from './output.js';
 import { scanProject } from './scan.js';
 
-const VALID_FLAGS = new Set(['all', 'json', 'fail-on', 'ecosystem', 'ignore', 'help', 'init']);
+const VALID_FLAGS = new Set([
+  'all',
+  'json',
+  'fail-on',
+  'ecosystem',
+  'ignore',
+  'help',
+  'init',
+  'offline',
+]);
 const VALID_FAIL_LEVELS = new Set(['high', 'medium', 'unknown']);
 
 const HELP_TEXT = `
@@ -18,6 +27,9 @@ Options:
   --fail-on=LEVEL    Exit 1 if risk level found (high, medium, unknown)
   --ecosystem=NAME   Force specific ecosystem (npm, cargo, python, ruby, go, swift)
   --ignore=PKG,...   Ignore specific packages (comma-separated)
+  --offline          Make no network call: no registry or GitHub lookup, cargo
+                     --offline, Go with GOPROXY=off. A license not found on
+                     disk is reported as unknown
   --init             Generate a default .lguardrc config file
   -h, --help         Show this help
 
@@ -107,6 +119,7 @@ export async function main(argv: string[]): Promise<number> {
       ecosystem: flags.ecosystem as string | undefined,
       ignore,
       config,
+      offline: flags.offline === true,
     });
 
     if (flags.json) {

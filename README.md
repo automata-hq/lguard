@@ -40,6 +40,9 @@ lguard --ecosystem=cargo
 # Ignore specific packages
 lguard --ignore=some-pkg,another-pkg
 
+# Make no network call (registries, GitHub, cargo, go)
+lguard --offline
+
 # Generate a .lguardrc config file
 lguard --init
 ```
@@ -47,7 +50,7 @@ lguard --init
 ## Example output
 
 ```
-lguard v0.4.0
+lguard v0.4.1
 
   Path:        /home/user/my-app
   Ecosystems:  npm
@@ -158,6 +161,10 @@ Dependency graph support by ecosystem:
 | Swift PM | `Package.swift` | `Package.resolved` + GitHub API |
 
 Multiple ecosystems in the same project are detected and scanned automatically.
+
+### Offline mode
+
+`--offline` makes lguard use only what is on disk. It sends no request to PyPI, RubyGems or GitHub, runs `cargo metadata --offline`, and runs Go with `GOPROXY=off` and `GOSUMDB=off`. A package whose license is not on disk shows as **UNKNOWN**. The JSON output has `"offline": true`. Use it in CI jobs with no network.
 
 ## Risk levels
 

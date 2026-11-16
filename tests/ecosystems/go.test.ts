@@ -153,4 +153,33 @@ describe('go.scan', () => {
       expect(byName[`example.com/${name}`]).toBe(expected);
     }
   });
+
+  test('offline: every go call runs with GOPROXY=off and GOSUMDB=off', async () => {
+    const calls = installGoHandler();
+
+    const { deps } = await go.scan(GO_PROJECT, { offline: true });
+
+    expect(deps).toHaveLength(2);
+    expect(calls.map((c) => c.args.join(' ')).sort()).toEqual([
+      'env GOMODCACHE',
+      'list -m -json all',
+      'mod graph',
+    ]);
+    for (const call of calls) {
+      const env = (call.opts as { env?: Record<string, string> }).env;
+      expect(env?.GOPROXY).toBe('off');
+      expect(env?.GOSUMDB).toBe('off');
+      expect(env?.PATH).toBe(process.env.PATH);
+    }
+  });
+
+  test('online: go calls keep the inherited environment', async () => {
+    const calls = installGoHandler();
+
+    await go.scan(GO_PROJECT);
+
+    for (const call of calls) {
+      expect((call.opts as { env?: unknown }).env).toBe(undefined);
+    }
+  });
 });

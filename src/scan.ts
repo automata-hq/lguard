@@ -6,6 +6,7 @@ export interface ScanOptions {
   ecosystem?: string;
   ignore?: string[];
   config?: Config | null;
+  offline?: boolean;
 }
 
 export async function scanProject(
@@ -41,8 +42,9 @@ export async function scanProject(
 
   for (const eco of detected) {
     try {
-      const result = await eco.scan(targetPath);
+      const result = await eco.scan(targetPath, { offline: options.offline === true });
       const { deps, graph = {}, directDeps = new Set<string>() } = result;
+      const chainOf = Object.keys(graph).length > 0 ? chainFinder(graph, directDeps) : null;
 
       for (const dep of deps) {
         if (ignoreSet.has(dep.name)) continue;
@@ -71,11 +73,7 @@ export async function scanProject(
           }
         }
 
-        // Compute chain for transitive deps
-        let chain: string[] | null = null;
-        if (!isDirect && Object.keys(graph).length > 0) {
-          chain = findChain(graph, directDeps, dep.name);
-        }
+        const chain = !isDirect && chainOf ? chainOf(dep.name) : null;
 
         allDeps.push({
           ...dep,
@@ -117,6 +115,35 @@ export async function scanProject(
     dependencies: allDeps,
     summary,
     hasConfig: !!config,
+    ...(options.offline ? { offline: true as const } : {}),
+  };
+}
+
+export function chainFinder(
+  graph: Record<string, string[]>,
+  directDeps: Set<string>,
+): (target: string) => string[] | null {
+  const parent = new Map<string, string | null>();
+  const queue = [...directDeps];
+  for (const dep of queue) parent.set(dep, null);
+
+  for (let i = 0; i < queue.length; i++) {
+    const current = queue[i] as string;
+    for (const child of graph[current] || []) {
+      if (!parent.has(child)) {
+        parent.set(child, current);
+        queue.push(child);
+      }
+    }
+  }
+
+  return (target) => {
+    if (!parent.has(target)) return null;
+    const path: string[] = [];
+    for (let node: string | null | undefined = target; node != null; node = parent.get(node)) {
+      path.push(node);
+    }
+    return path.reverse();
   };
 }
 
@@ -125,26 +152,5 @@ export function findChain(
   directDeps: Set<string>,
   target: string,
 ): string[] | null {
-  if (directDeps.size === 0) return null;
-
-  const queue = [...directDeps].map((d) => [d]);
-  const visited = new Set<string>();
-
-  while (queue.length) {
-    const path = queue.shift();
-    if (!path) break;
-    const current = path[path.length - 1];
-    if (current === undefined) continue;
-    if (current === target) return path;
-    if (visited.has(current)) continue;
-    visited.add(current);
-
-    for (const child of graph[current] || []) {
-      if (!visited.has(child)) {
-        queue.push([...path, child]);
-      }
-    }
-  }
-
-  return null;
+  return chainFinder(graph, directDeps)(target);
 }

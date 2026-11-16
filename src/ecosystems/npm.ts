@@ -1,9 +1,16 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { FS_CONCURRENCY, UNKNOWN_VERSION } from '../constants.js';
+import { type Limiter, limiter } from '../limit.js';
 import type { Dep, Ecosystem } from '../types.js';
 
 interface PkgInfo extends Dep {
   deps: string[];
+}
+
+interface Installed {
+  pkg: PkgInfo;
+  nested: Installed[];
 }
 
 interface PackageJson {
@@ -49,51 +56,49 @@ export const npm: Ecosystem = {
 
     const seen = new Map<string, Dep>();
     const graph: Record<string, string[]> = {};
-    await scanNodeModules(nodeModules, seen, graph);
+    record(await listInstalled(nodeModules, limiter(FS_CONCURRENCY)), seen, graph);
 
     return { deps: [...seen.values()], graph, directDeps };
   },
 };
 
-async function scanNodeModules(
-  nmDir: string,
-  seen: Map<string, Dep>,
-  graph: Record<string, string[]>,
-): Promise<void> {
-  let entries: string[];
-  try {
-    entries = await readdir(nmDir);
-  } catch {
-    return;
-  }
+async function listInstalled(nmDir: string, io: Limiter): Promise<Installed[]> {
+  const list = (dir: string) => io(() => readdir(dir)).catch(() => [] as string[]);
 
-  for (const entry of entries) {
-    if (entry.startsWith('.')) continue;
+  const pkgDirs = (
+    await Promise.all(
+      (
+        await list(nmDir)
+      )
+        .filter((entry) => !entry.startsWith('.'))
+        .map(async (entry) =>
+          entry.startsWith('@')
+            ? (await list(join(nmDir, entry))).map((scoped) => join(nmDir, entry, scoped))
+            : [join(nmDir, entry)],
+        ),
+    )
+  ).flat();
 
-    if (entry.startsWith('@')) {
-      const scopedEntries = await readdir(join(nmDir, entry)).catch(() => [] as string[]);
-      for (const scopedEntry of scopedEntries) {
-        await processPackage(join(nmDir, entry, scopedEntry), seen, graph);
-      }
-    } else {
-      await processPackage(join(nmDir, entry), seen, graph);
-    }
-  }
+  const installed = await Promise.all(
+    pkgDirs.map(async (pkgDir): Promise<Installed | null> => {
+      const pkg = await io(() => readPkg(join(pkgDir, 'package.json')));
+      if (!pkg) return null;
+      return { pkg, nested: await listInstalled(join(pkgDir, 'node_modules'), io) };
+    }),
+  );
+
+  return installed.filter((item): item is Installed => item !== null);
 }
 
-async function processPackage(
-  pkgDir: string,
-  seen: Map<string, Dep>,
-  graph: Record<string, string[]>,
-): Promise<void> {
-  const pkg = await readPkg(join(pkgDir, 'package.json'));
-  if (!pkg) return;
-  const key = `${pkg.name}@${pkg.version}`;
-  if (!seen.has(key)) {
-    seen.set(key, { name: pkg.name, version: pkg.version, license: pkg.license });
-    if (!(pkg.name in graph)) graph[pkg.name] = pkg.deps;
+function record(installed: Installed[], seen: Map<string, Dep>, graph: Record<string, string[]>) {
+  for (const { pkg, nested } of installed) {
+    const key = `${pkg.name}@${pkg.version}`;
+    if (!seen.has(key)) {
+      seen.set(key, { name: pkg.name, version: pkg.version, license: pkg.license });
+      if (!(pkg.name in graph)) graph[pkg.name] = pkg.deps;
+    }
+    record(nested, seen, graph);
   }
-  await scanNodeModules(join(pkgDir, 'node_modules'), seen, graph);
 }
 
 async function readPkg(path: string): Promise<PkgInfo | null> {
@@ -112,7 +117,7 @@ async function readPkg(path: string): Promise<PkgInfo | null> {
       // real installers) flows through as undefined and its JSON entry omits
       // the name key. No fallback is applied, unlike version below.
       name: pkg.name as string,
-      version: pkg.version || 'unknown',
+      version: pkg.version || UNKNOWN_VERSION,
       license: license || null,
       deps: [
         ...Object.keys(pkg.dependencies || {}),

@@ -81,4 +81,16 @@ describe('cargo.scan', () => {
     execMock.handler = () => Promise.reject(new Error('boom'));
     expect(cargo.scan(CARGO_PROJECT)).rejects.toThrow('cargo metadata failed: boom');
   });
+
+  test('offline: cargo metadata gets --offline', async () => {
+    const calls: string[][] = [];
+    execMock.handler = async (_cmd, args) => {
+      calls.push(args);
+      return { stdout: await readFile(METADATA, 'utf-8'), stderr: '' };
+    };
+
+    await cargo.scan(CARGO_PROJECT, { offline: true });
+
+    expect(calls).toEqual([['metadata', '--format-version', '1', '--offline']]);
+  });
 });

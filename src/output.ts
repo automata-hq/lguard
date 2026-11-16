@@ -61,6 +61,7 @@ export function formatResults(results: ScanResult, options: FormatOptions = {}):
   console.log(`  Ecosystems:  ${results.ecosystems.join(', ')}`);
   console.log(`  Total deps:  ${results.summary.total}`);
   if (results.hasConfig) console.log(`  Config:      .lguardrc`);
+  if (results.offline) console.log(`  Mode:        offline (no network call)`);
   console.log();
 
   const violations = results.dependencies.filter((d) => d.violation);

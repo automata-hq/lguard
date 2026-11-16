@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { EXEC_MAX_BUFFER } from '../constants.js';
+import { CARGO_OFFLINE_FLAG, EXEC_MAX_BUFFER } from '../constants.js';
 import { runCommand } from '../exec.js';
 import type { Ecosystem } from '../types.js';
 
@@ -24,10 +24,16 @@ export const cargo: Ecosystem = {
     }
   },
 
-  async scan(dir) {
+  async scan(dir, context) {
+    const args = [
+      'metadata',
+      '--format-version',
+      '1',
+      ...(context?.offline ? [CARGO_OFFLINE_FLAG] : []),
+    ];
     let stdout: string;
     try {
-      ({ stdout } = await runCommand('cargo', ['metadata', '--format-version', '1'], {
+      ({ stdout } = await runCommand('cargo', args, {
         cwd: dir,
         maxBuffer: EXEC_MAX_BUFFER,
       }));

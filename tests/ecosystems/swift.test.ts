@@ -107,4 +107,18 @@ describe('swift.scan — errors', () => {
       'Package.resolved not found — run swift package resolve first',
     );
   });
+
+  test('offline: no GitHub call; pins kept, licenses null', async () => {
+    const urls: string[] = [];
+    restoreFetch = stubGitHub((url) => urls.push(url));
+
+    const { deps } = await swift.scan(SWIFT_V2, { offline: true });
+
+    expect(urls).toEqual([]);
+    expect(deps.find((d) => d.name === 'swift-algorithms')).toEqual({
+      name: 'swift-algorithms',
+      version: '1.2.0',
+      license: null,
+    });
+  });
 });
